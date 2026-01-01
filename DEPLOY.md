@@ -7,10 +7,12 @@
 ### 步驟：
 
 1. **確保倉庫名稱正確**
-   - 如果您的 GitHub 倉庫名稱不是 `risk-dice-(risky-dice)`，請修改 `vite.config.ts` 中的 `base` 配置：
+   - 當前 GitHub 倉庫名稱是 `risk-dice`
+   - 如果您的 GitHub 倉庫名稱不同，請修改 `vite.config.ts` 中的 `base` 配置：
    ```typescript
    base: process.env.GITHUB_PAGES === 'true' ? '/您的倉庫名稱/' : '/',
    ```
+   - **重要**：使用 `git remote -v` 查看實際的倉庫 URL 來確認正確的倉庫名稱
 
 2. **啟用 GitHub Pages（兩種方法）**
 
@@ -93,8 +95,9 @@ Failed to load resource: the server responded with a status of 404
 
 3. **檢查構建後的 HTML 文件**
    - 打開 `dist/index.html`
-   - 確認資源路徑包含倉庫名稱：`/risk-dice-(risky-dice)/assets/...`
+   - 確認資源路徑包含倉庫名稱：`/risk-dice/assets/...`
    - 如果路徑是 `/assets/...`，說明構建時沒有設置 `GITHUB_PAGES=true`
+   - 使用 `git remote -v` 查看實際的倉庫 URL 來確認正確的倉庫名稱
 
 4. **清除瀏覽器緩存**
    - 硬刷新頁面（Ctrl+F5 或 Cmd+Shift+R）

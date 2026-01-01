@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => {
     return {
       // 如果您的 GitHub 倉庫名稱不同，請修改此處
       // 例如：如果倉庫名為 'my-dice-app'，則改為 '/my-dice-app/'
-      base: isGitHubPages ? '/risk-dice-(risky-dice)/' : '/',
+      base: isGitHubPages ? '/risk-dice/' : '/',
       server: {
         port: 3000,
         host: '0.0.0.0',
