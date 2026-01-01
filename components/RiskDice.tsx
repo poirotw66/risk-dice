@@ -197,19 +197,63 @@ const IcosahedronDice: React.FC<{
 }> = ({ outcome, isRolling, faceTexts, faceColors, faceHighlights }) => {
   const groupRef = useRef<THREE.Group>(null);
 
-  // 旋轉動畫 - 加快速度
-  useFrame((state, delta) => {
-    if (isRolling && groupRef.current) {
-      groupRef.current.rotation.x += delta * 5;
-      groupRef.current.rotation.y += delta * 4;
-      groupRef.current.rotation.z += delta * 3;
-    }
-  });
-
   // 創建正二十面體的頂點和面 - 使用標準定義
   const faces = useMemo(() => {
     return createStandardIcosahedron();
   }, []);
+
+  // 計算讓第一個面朝向相機的旋轉
+  const targetRotation = useMemo(() => {
+    if (faces.length === 0) return { x: 0, y: 0, z: 0 };
+    
+    // 第一個面的法向量（應該朝向使用者/相機）
+    const face0Normal = faces[0].normal.clone().normalize();
+    
+    // 目標方向是朝向相機（Z軸正方向，即 [0, 0, 1]）
+    const targetDirection = new THREE.Vector3(0, 0, 1);
+    
+    // 計算旋轉四元數，將法向量對齊到目標方向
+    const quaternion = new THREE.Quaternion();
+    quaternion.setFromUnitVectors(face0Normal, targetDirection);
+    
+    // 將四元數轉換為歐拉角（使用 'XYZ' 順序）
+    const euler = new THREE.Euler().setFromQuaternion(quaternion, 'XYZ');
+    
+    return {
+      x: euler.x,
+      y: euler.y,
+      z: euler.z,
+    };
+  }, [faces]);
+
+  // 旋轉動畫 - 加快速度
+  useFrame((state, delta) => {
+    if (isRolling && groupRef.current) {
+      // 滾動時隨機旋轉
+      groupRef.current.rotation.x += delta * 5;
+      groupRef.current.rotation.y += delta * 4;
+      groupRef.current.rotation.z += delta * 3;
+    } else if (groupRef.current && !isRolling) {
+      // 停止時平滑旋轉到目標位置，讓第一個面朝向相機
+      const current = groupRef.current.rotation;
+      const target = targetRotation;
+      const speed = 10; // 旋轉速度
+      
+      // 使用更平滑的插值
+      const lerpFactor = Math.min(1, delta * speed);
+      current.x = THREE.MathUtils.lerp(current.x, target.x, lerpFactor);
+      current.y = THREE.MathUtils.lerp(current.y, target.y, lerpFactor);
+      current.z = THREE.MathUtils.lerp(current.z, target.z, lerpFactor);
+      
+      // 當接近目標時，直接設置為目標值以避免微小抖動
+      const threshold = 0.01;
+      if (Math.abs(current.x - target.x) < threshold &&
+          Math.abs(current.y - target.y) < threshold &&
+          Math.abs(current.z - target.z) < threshold) {
+        current.set(target.x, target.y, target.z);
+      }
+    }
+  });
 
   // 確保有20個面
   useEffect(() => {
@@ -224,8 +268,9 @@ const IcosahedronDice: React.FC<{
     return null;
   }
 
+
   return (
-    <group ref={groupRef} rotation={[0.9, 0, 0]}>
+    <group ref={groupRef} rotation={[0, 0, 0]}>
       {faces.map((face, index) => (
         <DiceFace
           key={`face-${index}`}
