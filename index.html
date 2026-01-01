@@ -5,121 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Risk Dice | 風險骰子</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎲</text></svg>" />
-    <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700;900&display=swap" rel="stylesheet">
-    <style>
-      body {
-        font-family: 'Noto Serif TC', serif;
-        background-color: #0f172a;
-        color: #f8fafc;
-      }
-      /* 3D Scene Utilities */
-      .perspective-scene {
-        perspective: 1200px;
-      }
-      .transform-style-3d {
-        transform-style: preserve-3d;
-      }
-      .backface-hidden {
-        backface-visibility: hidden;
-      }
-      
-      /* Rolling Animation */
-      @keyframes tumble {
-        0% { transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg); }
-        100% { transform: rotateX(720deg) rotateY(360deg) rotateZ(180deg); }
-      }
-      
-      .animate-tumble {
-        animation: tumble 0.6s linear infinite;
-      }
 
-      /* Explosion Effects */
-      @keyframes explode {
-        0% { opacity: 1; transform: scale(1); }
-        100% { opacity: 0; transform: scale(2); }
-      }
-
-      @keyframes shock {
-        0%, 100% { transform: translate(0, 0) rotate(0); }
-        10% { transform: translate(-10px, -10px) rotate(-3deg); }
-        20% { transform: translate(10px, 10px) rotate(3deg); }
-        30% { transform: translate(-10px, 10px) rotate(-3deg); }
-        40% { transform: translate(10px, -10px) rotate(3deg); }
-        50% { transform: translate(-5px, -5px) rotate(0); }
-        60% { transform: translate(5px, 5px) rotate(0); }
-      }
-      
-      @keyframes text-slam {
-        0% { transform: scale(5); opacity: 0; }
-        50% { transform: scale(1); opacity: 1; }
-        60% { transform: scale(1.1); }
-        100% { transform: scale(1); }
-      }
-
-      .animate-explode {
-        animation: explode 0.8s ease-out forwards;
-      }
-
-      .animate-shock {
-        animation: shock 0.6s ease-in-out;
-      }
-      
-      .animate-text-slam {
-        animation: text-slam 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-      }
-
-      /* Glow effects */
-      .glow-text {
-        text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
-      }
-      .glow-red {
-        text-shadow: 0 0 20px rgba(220, 38, 38, 0.8), 0 0 40px rgba(220, 38, 38, 0.4);
-      }
-      .glow-gold {
-        text-shadow: 0 0 20px rgba(234, 179, 8, 0.8), 0 0 40px rgba(234, 179, 8, 0.4);
-      }
-
-      /* Icosahedron Face Geometry */
-      /* Side = 100px. Height = 86.6px (100 * sqrt(3) / 2). */
-      /* Centroid is at 57.735px from top (height * 2/3 = 86.6 * 2/3). */
-      /* Container center is at (50px, 50px) */
-      /* To align Centroid with Container Center: */
-      /*   top: 50px - 57.735px = -7.735px */
-      /*   left: 0px (centroid is at 50% = 50px horizontally) */
-      .d20-face {
-        position: absolute;
-        /* Container center is at (50px, 50px) */
-        /* Face centroid should be at container center */
-        /* Centroid is at (50px from left, 57.735px from top of face element) */
-        /* So: top = 50px - 57.735px = -7.735px */
-        top: -7.735px;
-        left: 0;
-        width: 100px;
-        height: 86.6025403784px; /* Precise: 100 * sqrt(3) / 2 = 86.6025403784 */
-        text-align: center;
-        /* Equilateral triangle pointing UP */
-        clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
-        /* Transform origin at centroid: 50% horizontal (50px), 57.735px from top */
-        transform-origin: 50px 57.735px; 
-        display: flex;
-        align-items: center; 
-        justify-content: center;
-        backface-visibility: hidden;
-        will-change: transform;
-        box-sizing: border-box;
-      }
-      
-      .d20-face-content {
-        /* Centering text visually in the triangle */
-        /* Flex centers at 43.3px (height/2). Centroid is at 57.735px. Difference is +14.4px */
-        transform: translateY(14px);
-        width: 100%;
-        backface-visibility: hidden;
-      }
-    </style>
-
-<link rel="stylesheet" href="/index.css">
   <script type="importmap">
 {
   "imports": {
@@ -129,8 +16,9 @@
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
   }
 }
-</script>
-  <script type="module" crossorigin src="/risk-dice-(risky-dice)/assets/index-4YtIiraw.js"></script>
+  </script>
+  <script type="module" crossorigin src="/risk-dice-(risky-dice)/assets/index-wUKkXF07.js"></script>
+  <link rel="stylesheet" crossorigin href="/risk-dice-(risky-dice)/assets/index-Bkz4cxon.css">
 </head>
   <body>
     <div id="root"></div>
