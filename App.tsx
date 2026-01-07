@@ -162,7 +162,16 @@ export default function App() {
   };
 
   return (
-    <div className={`min-h-screen bg-slate-950 flex flex-col items-center py-8 px-4 overflow-hidden relative ${showExplosion ? 'animate-shock' : ''}`}>
+    <div className={`min-h-screen flex flex-col items-center py-8 px-4 overflow-hidden relative ${showExplosion ? 'animate-shock' : ''}`}
+         style={{
+           backgroundColor: '#1A1A2E',
+           backgroundImage: `
+             repeating-linear-gradient(0deg, rgba(1, 205, 254, 0.05) 0px, transparent 2px, transparent 4px, rgba(1, 205, 254, 0.05) 6px),
+             repeating-linear-gradient(90deg, rgba(1, 205, 254, 0.05) 0px, transparent 2px, transparent 4px, rgba(1, 205, 254, 0.05) 6px),
+             radial-gradient(circle at 20% 30%, rgba(1, 205, 254, 0.2) 0%, transparent 50%),
+             radial-gradient(circle at 80% 70%, rgba(255, 113, 206, 0.2) 0%, transparent 50%)
+           `
+         }}>
       
       {/* Intense Explosion Overlay */}
       {showExplosion && (
@@ -174,130 +183,189 @@ export default function App() {
             {/* Radial Shockwave */}
             <div className="absolute top-1/2 left-1/2 w-[200vw] h-[200vw] -translate-x-1/2 -translate-y-1/2 bg-gradient-to-r from-transparent via-red-500/50 to-transparent rounded-full animate-shockwave opacity-0"></div>
             
-            <h1 className="relative z-50 text-[150px] md:text-[250px] font-black text-red-600 animate-text-slam drop-shadow-[0_0_50px_rgba(255,0,0,1)] uppercase tracking-tighter leading-none" style={{textShadow: "10px 10px 0px #000"}}>
+            <h1 className="relative z-50 text-[150px] md:text-[250px] animate-text-slam uppercase leading-none glow-red" 
+                style={{
+                  fontFamily: "'Press Start 2P', cursive",
+                  color: '#FF006E',
+                  textShadow: "8px 8px 0px #000, 0 0 40px rgba(255, 0, 110, 1)"
+                }}>
               大凶
             </h1>
         </div>
       )}
 
-      {/* Background Decor */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
-        <div className="absolute top-[-20%] left-[-20%] w-[60%] h-[60%] bg-indigo-900/10 rounded-full blur-[120px]"></div>
-        <div className="absolute bottom-[-20%] right-[-20%] w-[60%] h-[60%] bg-purple-900/10 rounded-full blur-[120px]"></div>
+      {/* Card Game Grid Background */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0 opacity-20">
+        {[...Array(6)].map((_, i) => (
+          <div
+            key={i}
+            className="absolute border-2 rounded-lg"
+            style={{
+              width: '180px',
+              height: '250px',
+              top: `${Math.random() * 100}%`,
+              left: `${Math.random() * 100}%`,
+              transform: `rotate(${Math.random() * 360}deg)`,
+              borderColor: i % 2 === 0 ? 'rgba(1, 205, 254, 0.3)' : 'rgba(255, 113, 206, 0.3)',
+              boxShadow: i % 2 === 0 ? '0 0 20px rgba(1, 205, 254, 0.3)' : '0 0 20px rgba(255, 113, 206, 0.3)'
+            }}
+          />
+        ))}
       </div>
 
-      {/* Header */}
+      {/* Header - Game Card Title */}
       <header className="z-10 text-center mb-8 relative">
-        <div className="inline-block relative">
-            <h1 className="text-4xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-br from-slate-100 to-slate-400 mb-2 tracking-tighter drop-shadow-sm">
-            風險骰子
+        <div className="inline-block relative px-8 py-6 card-border bg-gradient-to-b from-cyan-950/80 to-pink-950/80 backdrop-blur-sm rounded-lg">
+            <h1 className="text-3xl md:text-5xl text-transparent bg-clip-text bg-gradient-to-br from-cyan-300 via-pink-200 to-cyan-300 mb-3 glow-cyan tracking-wider"
+                style={{fontFamily: "'Press Start 2P', cursive"}}>
+              風險骰子
             </h1>
+            <div className="h-1 w-full bg-gradient-to-r from-transparent via-cyan-400 to-transparent mb-3"></div>
+            <p className="text-cyan-300 text-xs md:text-sm tracking-widest uppercase" style={{fontFamily: "'VT323', monospace", fontSize: '18px'}}>
+              ★ The D20 of Fate ★
+            </p>
+            <p className="text-pink-400/80 text-xs tracking-wider mt-1" style={{fontFamily: "'VT323', monospace", fontSize: '16px'}}>
+              1 Calamity • 19 Fortunes
+            </p>
         </div>
-        <p className="text-slate-400 font-serif italic text-sm md:text-base max-w-md mx-auto">
-          "The D20 of Fate. 1 Calamity, 19 Fortunes."
-        </p>
       </header>
 
       {/* Main Game Area */}
       <main className="z-10 flex flex-col items-center justify-center flex-grow w-full max-w-2xl">
         
-        {/* Stats HUD */}
-        <div className="w-full grid grid-cols-3 gap-2 bg-slate-900/60 backdrop-blur-md border border-slate-800 p-4 rounded-2xl mb-12 shadow-2xl">
-           <div className="flex flex-col items-center justify-center">
-             <div className="text-[10px] md:text-xs text-slate-500 uppercase tracking-widest mb-1 flex items-center gap-1">
-               <History size={12} /> Rolls
+        {/* Stats HUD - Card Game Style */}
+        <div className="w-full grid grid-cols-3 gap-3 mb-12">
+           <div className="card-border bg-gradient-to-b from-cyan-950/90 to-blue-950/90 backdrop-blur-md p-4 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:scale-105 transition-transform">
+             <div className="text-xs text-cyan-400 uppercase tracking-widest mb-2 flex items-center gap-1" style={{fontFamily: "'VT323', monospace", fontSize: '16px'}}>
+               <History size={16} /> ROLLS
              </div>
-             <div className="text-xl md:text-2xl font-bold text-slate-300 font-mono">{state.totalRolls}</div>
+             <div className="text-3xl md:text-4xl font-bold text-cyan-200 glow-text" style={{fontFamily: "'Press Start 2P', cursive"}}>{state.totalRolls}</div>
            </div>
 
-           <div className="flex flex-col items-center justify-center border-x border-slate-800/50 relative">
-             <div className="text-[10px] md:text-xs text-slate-500 uppercase tracking-widest mb-1 flex items-center gap-1">
-               <Sparkles size={12} className="text-yellow-500" /> Streak
+           <div className="relative card-border-gold bg-gradient-to-b from-emerald-950/90 to-teal-950/90 backdrop-blur-md p-4 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:scale-105 transition-transform">
+             <div className="text-xs text-emerald-400 uppercase tracking-widest mb-2 flex items-center gap-1" style={{fontFamily: "'VT323', monospace", fontSize: '16px'}}>
+               <Sparkles size={16} className="text-emerald-400" /> STREAK
              </div>
-             <div className={`text-3xl md:text-5xl font-black font-mono transition-all duration-300 ${state.outcome === DiceOutcome.GREAT_MISFORTUNE ? 'text-red-600' : 'text-yellow-400 glow-gold'}`}>
+             <div className={`text-4xl md:text-6xl transition-all duration-300 glow-gold ${state.outcome === DiceOutcome.GREAT_MISFORTUNE ? 'text-pink-500' : 'text-emerald-300'}`}
+                  style={{fontFamily: "'Press Start 2P', cursive"}}>
                {state.streak}
              </div>
              {state.outcome === DiceOutcome.GREAT_FORTUNE && !isRolling && (
-                <div className="absolute -top-2 right-2">
-                    <span className="flex h-3 w-3">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-yellow-500"></span>
+                <div className="absolute -top-2 -right-2">
+                    <span className="flex h-4 w-4">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500"></span>
                     </span>
                 </div>
              )}
            </div>
 
-           <div className="flex flex-col items-center justify-center">
-             <div className="text-[10px] md:text-xs text-slate-500 uppercase tracking-widest mb-1 flex items-center gap-1">
-               <Trophy size={12} /> Max
+           <div className="card-border bg-gradient-to-b from-cyan-950/90 to-blue-950/90 backdrop-blur-md p-4 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:scale-105 transition-transform">
+             <div className="text-xs text-cyan-400 uppercase tracking-widest mb-2 flex items-center gap-1" style={{fontFamily: "'VT323', monospace", fontSize: '16px'}}>
+               <Trophy size={16} /> BEST
              </div>
-             <div className="text-xl md:text-2xl font-bold text-slate-300 font-mono">{state.maxStreak}</div>
+             <div className="text-3xl md:text-4xl font-bold text-cyan-200 glow-text" style={{fontFamily: "'Press Start 2P', cursive"}}>{state.maxStreak}</div>
            </div>
         </div>
 
-        {/* The Dice */}
-        <div className="mb-12 relative w-full flex justify-center h-[240px] items-center">
-          <RiskDice 
-            outcome={state.outcome} 
-            isRolling={isRolling} 
-            selectedFaceIndex={selectedFaceIndex}
-          />
+        {/* The Dice - Card Slot Style */}
+        <div className="mb-12 relative w-full flex justify-center h-[280px] items-center">
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-[300px] h-[300px] card-border bg-gradient-to-br from-cyan-950/50 to-pink-950/50 backdrop-blur-md rounded-lg flex items-center justify-center">
+              <RiskDice 
+                outcome={state.outcome} 
+                isRolling={isRolling} 
+                selectedFaceIndex={selectedFaceIndex}
+              />
+            </div>
+          </div>
         </div>
 
-        {/* Dynamic Status Message */}
-        <div className="h-24 flex flex-col items-center justify-center mb-8 text-center px-4 w-full">
+        {/* Dynamic Status Message - Card Text Style */}
+        <div className="h-32 flex flex-col items-center justify-center mb-8 text-center px-4 w-full">
           {isRolling && (
-            <p className="text-xl text-indigo-300 animate-pulse font-serif tracking-widest">FATE IS SPINNING...</p>
+            <div className="card-border bg-gradient-to-b from-cyan-950/90 to-pink-950/90 backdrop-blur-md px-8 py-4 rounded-lg animate-pulse">
+              <p className="text-2xl text-cyan-300 tracking-widest glow-cyan" style={{fontFamily: "'Press Start 2P', cursive"}}>
+                ROLLING...
+              </p>
+            </div>
           )}
           {!isRolling && state.outcome === DiceOutcome.IDLE && (
-            <p className="text-slate-500 text-lg font-light">Dare to test your luck?</p>
+            <div className="card-border bg-gradient-to-b from-cyan-950/70 to-pink-950/70 backdrop-blur-sm px-8 py-4 rounded-lg">
+              <p className="text-cyan-300 text-lg tracking-wider" style={{fontFamily: "'VT323', monospace", fontSize: '24px'}}>
+                Press START to roll fate...
+              </p>
+            </div>
           )}
           {!isRolling && state.outcome === DiceOutcome.GREAT_FORTUNE && (
-            <div className="animate-bounce-short">
-              <p className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-t from-yellow-300 to-yellow-100 glow-text mb-2">大吉</p>
-              <p className="text-emerald-400 text-xs md:text-sm uppercase tracking-widest">Fortune Smiles Upon You</p>
+            <div className="card-border-gold bg-gradient-to-b from-emerald-950/90 to-teal-950/90 backdrop-blur-md px-8 py-6 rounded-lg animate-bounce-short">
+              <p className="text-5xl md:text-6xl text-emerald-300 glow-gold mb-3" style={{fontFamily: "'Press Start 2P', cursive"}}>
+                大吉
+              </p>
+              <div className="h-1 w-full bg-gradient-to-r from-transparent via-emerald-400 to-transparent mb-2"></div>
+              <p className="text-emerald-400 text-sm uppercase tracking-widest" style={{fontFamily: "'VT323', monospace", fontSize: '18px'}}>
+                ★ FORTUNE SMILES ★
+              </p>
             </div>
           )}
           {!isRolling && state.outcome === DiceOutcome.GREAT_MISFORTUNE && (
-            <div className="animate-shake">
-              <p className="text-4xl md:text-5xl font-black text-red-600 glow-red mb-2">大凶</p>
-              <p className="text-red-400 text-xs md:text-sm uppercase tracking-widest">Calamity Strikes</p>
+            <div className="card-border-red bg-gradient-to-b from-pink-950/90 to-rose-950/90 backdrop-blur-md px-8 py-6 rounded-lg animate-shake">
+              <p className="text-5xl md:text-6xl glow-red mb-3" style={{fontFamily: "'Press Start 2P', cursive", color: '#FF006E'}}>
+                大凶
+              </p>
+              <div className="h-1 w-full bg-gradient-to-r from-transparent via-pink-500 to-transparent mb-2"></div>
+              <p className="text-pink-400 text-sm uppercase tracking-widest" style={{fontFamily: "'VT323', monospace", fontSize: '18px'}}>
+                ☠ CALAMITY STRIKES ☠
+              </p>
             </div>
           )}
         </div>
 
-        {/* Controls */}
+        {/* Controls - Greed Island Button Style */}
         <button
           onClick={rollDice}
           disabled={isRolling}
           className={`
-            relative group w-full max-w-[280px] py-4 rounded-full 
-            font-bold text-lg tracking-[0.2em] uppercase transition-all duration-300
-            border border-white/10
+            relative group w-full max-w-[320px] py-5 rounded-lg 
+            text-lg tracking-[0.2em] uppercase transition-all duration-300
             ${isRolling 
-              ? 'bg-slate-900 text-slate-600 cursor-not-allowed transform scale-95' 
-              : 'bg-gradient-to-r from-indigo-700 via-purple-700 to-indigo-700 bg-[length:200%_auto] animate-gradient text-white shadow-[0_0_30px_rgba(79,70,229,0.4)] hover:shadow-[0_0_50px_rgba(79,70,229,0.6)] hover:scale-105 active:scale-95'
+              ? 'bg-slate-900 text-slate-600 cursor-not-allowed transform scale-95 border-4 border-slate-800' 
+              : 'card-border bg-gradient-to-b from-cyan-700 to-pink-800 text-cyan-100 hover:from-cyan-600 hover:to-pink-700 hover:scale-105 active:scale-95 cursor-pointer shadow-[0_0_40px_rgba(1,205,254,0.6)]'
             }
           `}
+          style={{fontFamily: "'Press Start 2P', cursive"}}
         >
-          {isRolling ? 'Rolling...' : 'Roll Fate'}
+          <div className="flex items-center justify-center gap-3">
+            <span className={isRolling ? '' : 'glow-cyan'}>
+              {isRolling ? '◆ ROLLING ◆' : '▶ ROLL FATE ◀'}
+            </span>
+          </div>
         </button>
         
         {state.totalRolls > 0 && !isRolling && (
            <button 
              onClick={resetGame}
-             className="mt-8 text-slate-600 hover:text-red-400 text-xs flex items-center gap-2 transition-colors opacity-60 hover:opacity-100"
+             className="mt-8 card-border bg-gradient-to-b from-pink-950/80 to-rose-950/80 backdrop-blur-sm px-6 py-3 rounded-lg text-pink-400 hover:text-pink-300 text-xs flex items-center gap-2 transition-all hover:scale-105 opacity-80 hover:opacity-100"
+             style={{fontFamily: "'VT323', monospace", fontSize: '18px'}}
            >
-             <RotateCcw size={12} /> RESET DESTINY
+             <RotateCcw size={16} /> RESET GAME
            </button>
         )}
       </main>
 
-      {/* Footer Info */}
-      <footer className="mt-auto py-6 text-slate-600 text-[10px] uppercase tracking-widest text-center">
-        <div className="flex justify-center gap-4 mb-2">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-600"></span> 95% Fortune</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-900"></span> 5% Ruin</span>
+      {/* Footer Info - Card Stats */}
+      <footer className="mt-auto py-6 text-center">
+        <div className="card-border bg-gradient-to-b from-cyan-950/70 to-pink-950/70 backdrop-blur-sm px-8 py-3 rounded-lg inline-block">
+          <div className="flex justify-center gap-6 text-cyan-300" style={{fontFamily: "'VT323', monospace", fontSize: '16px'}}>
+              <span className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(5,255,161,0.8)]"></span> 
+                95% FORTUNE
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full shadow-[0_0_10px_rgba(255,0,110,0.8)]" style={{backgroundColor: '#FF006E'}}></span> 
+                5% CALAMITY
+              </span>
+          </div>
         </div>
       </footer>
       

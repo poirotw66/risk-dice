@@ -49,14 +49,21 @@ const DiceFace: React.FC<{
 
     ctx.clearRect(0, 0, 512, 512);
 
+    // Card game style text colors with stronger contrast
     const textColor = isHighlighted 
-      ? (color === '#7f1d1d' ? '#fecaca' : '#fef3c7')
-      : '#64748b';
+      ? (color === '#7f1d1d' ? '#FCA5A5' : '#FDE047') // Brighter colors for highlights
+      : '#94A3B8'; // Slate for non-highlighted
     
     ctx.fillStyle = textColor;
-    ctx.font = 'bold 180px "Noto Serif TC", serif';
+    ctx.font = 'bold 180px "VT323", monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+
+    // Add glow effect for highlighted faces
+    if (isHighlighted) {
+      ctx.shadowColor = textColor;
+      ctx.shadowBlur = 20;
+    }
 
     ctx.fillText(text, 256, 256);
 
@@ -90,11 +97,11 @@ const DiceFace: React.FC<{
       <mesh geometry={geometry}>
         <meshStandardMaterial
           color={color}
-          metalness={0.2}
-          roughness={0.8}
+          metalness={0.4}
+          roughness={0.6}
           side={THREE.DoubleSide}
-          emissive={isHighlighted ? new THREE.Color(color).multiplyScalar(0.4) : new THREE.Color(0x000000)}
-          emissiveIntensity={isHighlighted ? 0.6 : 0}
+          emissive={isHighlighted ? new THREE.Color(color).multiplyScalar(0.6) : new THREE.Color(0x000000)}
+          emissiveIntensity={isHighlighted ? 0.8 : 0}
         />
       </mesh>
       {/* 文字平面 - 放在面的中心 */}
@@ -459,26 +466,26 @@ const RiskDice: React.FC<RiskDiceProps> = ({ outcome, isRolling, selectedFaceInd
         // 如果已經停止，根據最終 outcome 上色
         if (outcome === DiceOutcome.GREAT_MISFORTUNE) {
           text = '大凶';
-          color = '#7f1d1d'; // red-950
+          color = '#C2185B'; // pink-700 - vaporwave hot pink
           highlight = true;
         } else if (outcome === DiceOutcome.GREAT_FORTUNE) {
           text = '大吉';
-          color = '#ca8a04'; // yellow-600
+          color = '#00897B'; // teal-700 - vaporwave mint/teal
           highlight = true;
         } else if (outcome === DiceOutcome.ROLLING) {
           // 滾動時，暫時顯示為灰色，但標記為高亮
           text = '??';
-          color = '#475569'; // slate-600
+          color = '#0097A7'; // cyan-700 - vaporwave cyan
           highlight = false; // 滾動時不高亮
         } else {
           text = '??';
-          color = '#475569'; // slate-600
+          color = '#0097A7'; // cyan-700
           highlight = false;
         }
       } else {
-        // 其他面保持默認樣式
+        // 其他面保持默認樣式 - darker for better contrast with cyan/pink theme
         text = '大吉';
-        color = '#1e293b'; // slate-800
+        color = '#1A237E'; // indigo-950 - dark blue for vaporwave
         highlight = false;
       }
 
@@ -504,10 +511,10 @@ const RiskDice: React.FC<RiskDiceProps> = ({ outcome, isRolling, selectedFaceInd
           gl.setClearColor(0x000000, 0); // 透明背景
         }}
       >
-        <ambientLight intensity={1.5} />
-        <directionalLight position={[5, 5, 5]} intensity={2} />
-        <directionalLight position={[-5, -5, -5]} intensity={1} />
-        <pointLight position={[0, 0, 10]} intensity={0.8} />
+        <ambientLight intensity={1.8} />
+        <directionalLight position={[5, 5, 5]} intensity={2.5} color="#01CDFE" />
+        <directionalLight position={[-5, -5, -5]} intensity={1.5} color="#FF71CE" />
+        <pointLight position={[0, 0, 10]} intensity={1.2} color="#05FFA1" />
         <IcosahedronDice 
           outcome={outcome}
           isRolling={isRolling}
