@@ -48,6 +48,7 @@ export default function App() {
   const [showExplosion, setShowExplosion] = useState(false);
   const [selectedFaceIndex, setSelectedFaceIndex] = useState<number | null>(null); // 預先決定的抽中面
   const [useGlobalStreak, setUseGlobalStreak] = useState(false); // 是否使用全域 streak
+  const [showDescription, setShowDescription] = useState(false); // 是否顯示說明
   const audioContextRef = useRef<AudioContext | null>(null);
 
   // 自動儲存 state 到 localStorage
@@ -326,7 +327,7 @@ export default function App() {
       </div>
 
       {/* Header - Game Card Title */}
-      <header className="z-10 text-center mb-8 relative">
+      <header className="z-10 text-center mb-8 relative max-w-4xl w-full">
         <div className="inline-block relative px-8 py-6 card-border bg-gradient-to-b from-cyan-950/80 to-pink-950/80 backdrop-blur-sm rounded-lg">
             <h1 className="text-3xl md:text-5xl text-transparent bg-clip-text bg-gradient-to-br from-cyan-300 via-pink-200 to-cyan-300 mb-3 glow-cyan tracking-wider"
                 style={{fontFamily: "'Press Start 2P', cursive"}}>
@@ -334,12 +335,109 @@ export default function App() {
             </h1>
             <div className="h-1 w-full bg-gradient-to-r from-transparent via-cyan-400 to-transparent mb-3"></div>
             <p className="text-cyan-300 text-xs md:text-sm tracking-widest uppercase" style={{fontFamily: "'VT323', monospace", fontSize: '18px'}}>
-              ★ The D20 of Fate ★
+              ★ RISK DICE - D20 OF FATE ★
             </p>
             <p className="text-pink-400/80 text-xs tracking-wider mt-1" style={{fontFamily: "'VT323', monospace", fontSize: '16px'}}>
               1 Calamity • 19 Fortunes
             </p>
+            <button 
+              onClick={() => setShowDescription(!showDescription)}
+              className="mt-3 text-cyan-400/60 hover:text-cyan-300 text-xs transition-colors flex items-center gap-1 mx-auto"
+              style={{fontFamily: "'VT323', monospace", fontSize: '14px'}}
+            >
+              <span>{showDescription ? '▲' : '▼'}</span>
+              <span>{showDescription ? '隱藏說明' : '查看說明'}</span>
+            </button>
         </div>
+        
+        {/* Description Panel */}
+        {showDescription && (
+          <div className="mt-4 card-border bg-gradient-to-b from-gray-950/95 to-red-950/90 backdrop-blur-md rounded-lg p-6 text-left border-2 border-red-900/50 shadow-[0_0_30px_rgba(139,0,0,0.5)] animate-slideDown">
+            <div className="space-y-4 text-sm" style={{fontFamily: "'VT323', monospace", fontSize: '16px', lineHeight: '1.8'}}>
+              <div>
+                <h3 className="text-red-400 text-lg font-bold mb-2 flex items-center gap-2">
+                  <span className="text-2xl">⚠️</span> 風險骰子（Risk Dice）
+                </h3>
+                <p className="text-gray-300">
+                  《獵人（Hunter x Hunter）》貪婪之島篇中登場的特殊關鍵道具，<br/>
+                  也是將「<span className="text-cyan-400">命運</span>」與「<span className="text-pink-400">運氣</span>」具象化的極端博弈工具。
+                </p>
+              </div>
+              
+              <div className="border-l-4 border-yellow-600/50 pl-4 bg-yellow-950/20 py-2 rounded">
+                <p className="text-yellow-300">
+                  外型是一顆標準的<span className="font-bold text-yellow-400">二十面骰（D20）</span>，但其結構卻極不公平——<br/>
+                  在 20 個面中：<br/>
+                  <span className="text-green-400 font-bold text-lg">19 面刻著「大吉」</span><br/>
+                  <span className="text-red-400 font-bold text-lg">僅有 1 面刻著「大凶」</span>
+                </p>
+              </div>
+              
+              <div>
+                <h4 className="text-cyan-400 font-bold mb-2 text-base">🎲 擲骰規則與本質</h4>
+                <div className="space-y-2 text-gray-300">
+                  <p>每一次擲出風險骰子，都是一次與<span className="text-pink-400">命運</span>的交易：</p>
+                  <div className="pl-4 border-l-2 border-green-500/30">
+                    <p className="text-green-400">
+                      <span className="font-bold">擲出「大吉」</span>：<br/>
+                      你將獲得強力的幸運效果、加成或特殊收益，彷彿世界暫時站在你這一邊。
+                    </p>
+                  </div>
+                  <div className="pl-4 border-l-2 border-red-500/50">
+                    <p className="text-red-400">
+                      <span className="font-bold">擲出「大凶」</span>：<br/>
+                      將立即觸發極度不幸的事件，<span className="text-red-300">不但會抵消先前累積的好運</span>，還可能帶來災難性的後果。
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-red-950/40 border border-red-900/50 rounded p-3">
+                <h4 className="text-red-400 font-bold mb-2 text-base flex items-center gap-2">
+                  <span>⚠️</span> 真正的風險，不在機率
+                </h4>
+                <p className="text-gray-300">
+                  從數學上看，「大凶」出現的機率只有 <span className="text-yellow-400 font-bold">1/20 (5%)</span>。<br/>
+                  但風險骰子的可怕之處在於：
+                </p>
+                <p className="text-red-300 text-center text-lg font-bold mt-2 italic">
+                  「你不知道這顆『大凶』，會在第幾次擲出。」
+                </p>
+                <p className="text-gray-400 text-center mt-2">
+                  它不考驗運氣，<br/>
+                  <span className="text-cyan-400">它考驗的是——你什麼時候該停手。</span>
+                </p>
+              </div>
+              
+              <div>
+                <h4 className="text-pink-400 font-bold mb-2 text-base">🧠 道具哲學</h4>
+                <p className="text-gray-300">
+                  風險骰子並不是單純的「賭運氣」道具，而是：
+                </p>
+                <p className="text-yellow-300 italic text-center mt-2">
+                  一個將「<span className="text-red-400">貪婪</span>」、「<span className="text-orange-400">自信</span>」、「<span className="text-pink-400">僥倖心理</span>」逐步放大的陷阱。
+                </p>
+                <p className="text-gray-400 text-center mt-2 text-xs">
+                  用得越久，得到的越多，<br/>
+                  <span className="text-red-400">失去的時候，也會一次全部吐回去。</span>
+                </p>
+              </div>
+              
+              <div className="bg-gradient-to-r from-red-950/50 to-gray-950/50 border-2 border-red-800/70 rounded-lg p-4 mt-4">
+                <h4 className="text-red-300 font-bold mb-2 text-base flex items-center gap-2 justify-center">
+                  <span>🩸</span> 使用警告 <span>🩸</span>
+                </h4>
+                <p className="text-gray-300 italic text-center leading-relaxed">
+                  「幾乎每個使用風險骰子的玩家，<br/>
+                  在前期都會覺得——<span className="text-yellow-400">自己不可能那麼倒楣</span>。」
+                </p>
+                <p className="text-red-400 text-center mt-3 font-bold text-lg">
+                  直到他們擲出那一面為止。
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* Main Game Area */}
@@ -488,6 +586,19 @@ export default function App() {
            0%, 100% { opacity: 0; }
            10% { opacity: 1; }
            100% { opacity: 0; }
+        }
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        .animate-slideDown {
+          animation: slideDown 0.3s ease-out forwards;
         }
         .animate-shockwave {
            animation: shockwave 0.8s ease-out forwards;
