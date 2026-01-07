@@ -1,7 +1,13 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { DiceOutcome, GameState } from './types';
 import RiskDice from './components/RiskDice';
 import { Sparkles, History, Trophy, RotateCcw } from 'lucide-react';
+import { 
+  listenToGlobalStreak, 
+  incrementGlobalStreak, 
+  resetGlobalStreak,
+  isFirebaseAvailable 
+} from './src/firebase';
 
 // Configuration
 const SIDES = 20;
@@ -17,7 +23,34 @@ export default function App() {
   const [isRolling, setIsRolling] = useState(false);
   const [showExplosion, setShowExplosion] = useState(false);
   const [selectedFaceIndex, setSelectedFaceIndex] = useState<number | null>(null); // 預先決定的抽中面
+  const [useGlobalStreak, setUseGlobalStreak] = useState(false); // 是否使用全域 streak
   const audioContextRef = useRef<AudioContext | null>(null);
+
+  // 監聽 Firebase 全域 streak
+  useEffect(() => {
+    if (!isFirebaseAvailable()) {
+      console.log('Firebase not configured, using local streak');
+      return;
+    }
+
+    setUseGlobalStreak(true);
+    console.log('Firebase configured, using global streak');
+
+    const unsubscribe = listenToGlobalStreak((globalStreak) => {
+      console.log('Global streak updated:', globalStreak);
+      setState(prev => ({
+        ...prev,
+        streak: globalStreak,
+        maxStreak: Math.max(prev.maxStreak, globalStreak)
+      }));
+    });
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, []);
 
   // Initialize Audio Context on first interaction
   const initAudio = () => {
@@ -120,7 +153,7 @@ export default function App() {
     }, 100);
 
     // 滾動動畫持續時間
-    setTimeout(() => {
+    setTimeout(async () => {
       clearInterval(clickInterval);
       setIsRolling(false);
       
@@ -128,29 +161,60 @@ export default function App() {
       if (isBad) {
         playSound('lose');
         setShowExplosion(true);
+        
+        // 重置 streak（全域或本地）
+        if (useGlobalStreak) {
+          await resetGlobalStreak();
+        } else {
+          setState(prev => ({
+            streak: 0,
+            totalRolls: prev.totalRolls + 1,
+            outcome: DiceOutcome.GREAT_MISFORTUNE,
+            maxStreak: prev.maxStreak 
+          }));
+        }
+        
+        // 本地狀態更新
         setState(prev => ({
-          streak: 0,
+          ...prev,
           totalRolls: prev.totalRolls + 1,
           outcome: DiceOutcome.GREAT_MISFORTUNE,
-          maxStreak: prev.maxStreak 
         }));
+        
         setTimeout(() => setShowExplosion(false), 2000);
       } else {
         playSound('win');
-        setState(prev => {
-          const newStreak = prev.streak + 1;
-          return {
-            streak: newStreak,
-            totalRolls: prev.totalRolls + 1,
-            outcome: DiceOutcome.GREAT_FORTUNE,
-            maxStreak: Math.max(prev.maxStreak, newStreak)
-          };
-        });
+        
+        // 增加 streak（全域或本地）
+        if (useGlobalStreak) {
+          await incrementGlobalStreak();
+        } else {
+          setState(prev => {
+            const newStreak = prev.streak + 1;
+            return {
+              streak: newStreak,
+              totalRolls: prev.totalRolls + 1,
+              outcome: DiceOutcome.GREAT_FORTUNE,
+              maxStreak: Math.max(prev.maxStreak, newStreak)
+            };
+          });
+        }
+        
+        // 本地狀態更新
+        setState(prev => ({
+          ...prev,
+          totalRolls: prev.totalRolls + 1,
+          outcome: DiceOutcome.GREAT_FORTUNE,
+        }));
       }
     }, 1200); 
   };
 
-  const resetGame = () => {
+  const resetGame = async () => {
+    if (useGlobalStreak) {
+      await resetGlobalStreak();
+    }
+    
     setState({
       streak: 0,
       totalRolls: 0,

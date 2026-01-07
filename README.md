@@ -17,6 +17,19 @@
 - 🎯 自動對齊到骰到的面
 - 🎪 視覺效果和音效
 - 📊 統計追蹤（連勝、總投擲次數）
+- 🌍 **全域共享 STREAK**：所有玩家的 STREAK 即時同步累積（需設定 Firebase）
+
+## Firebase 全域 STREAK 功能
+
+本專案支援使用 Firebase Realtime Database 來實現**全域共享的 STREAK 功能**。啟用後，所有使用者的 STREAK 數值會即時同步，真正實現「全球玩家一起累積運氣」的體驗！
+
+### 快速設定
+
+1. 查看 [FIREBASE_SETUP.md](FIREBASE_SETUP.md) 取得完整設定教學
+2. 複製 `.env.example` 為 `.env` 並填入你的 Firebase 配置
+3. 如果不設定 Firebase，遊戲會自動使用本地 STREAK 模式
+
+詳細的 Firebase 設定步驟、安全性規則、部署配置等資訊，請參考 **[Firebase 設定教學](FIREBASE_SETUP.md)**。
 
 ## 本地運行
 
