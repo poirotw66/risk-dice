@@ -65,7 +65,14 @@ const DiceFace: React.FC<{
       ctx.shadowBlur = 20;
     }
 
-    ctx.fillText(text, 256, 256);
+    // 豎向書寫文字（從上到下）
+    const chars = text.split('');
+    const charSpacing = 190; // 字符間距
+    const startY = 256 - (chars.length - 1) * charSpacing / 2; // 居中起始位置
+    
+    chars.forEach((char, index) => {
+      ctx.fillText(char, 256, startY + index * charSpacing);
+    });
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.needsUpdate = true;

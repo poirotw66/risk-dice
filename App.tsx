@@ -528,8 +528,8 @@ export default function App() {
             </div>
           )}
           {!isRolling && state.outcome === DiceOutcome.GREAT_FORTUNE && (
-            <div className="card-border-gold bg-gradient-to-b from-emerald-950/90 to-teal-950/90 backdrop-blur-md px-8 py-6 rounded-lg animate-bounce-short">
-              <p className="text-5xl md:text-6xl text-emerald-300 glow-gold mb-3" style={{fontFamily: "'Press Start 2P', cursive"}}>
+            <div className="card-border-gold bg-gradient-to-b from-emerald-950/90 to-teal-950/90 backdrop-blur-md px-8 py-6 rounded-lg animate-bounce-short flex flex-col items-center">
+              <p className="text-5xl md:text-6xl text-emerald-300 glow-gold mb-3" style={{fontFamily: "'Press Start 2P', cursive", writingMode: 'vertical-rl', textOrientation: 'upright'}}>
                 大吉
               </p>
               <div className="h-1 w-full bg-gradient-to-r from-transparent via-emerald-400 to-transparent mb-2"></div>
@@ -539,8 +539,8 @@ export default function App() {
             </div>
           )}
           {!isRolling && state.outcome === DiceOutcome.GREAT_MISFORTUNE && (
-            <div className="card-border-red bg-gradient-to-b from-pink-950/90 to-rose-950/90 backdrop-blur-md px-8 py-6 rounded-lg animate-shake">
-              <p className="text-5xl md:text-6xl glow-red mb-3" style={{fontFamily: "'Press Start 2P', cursive", color: '#FF006E'}}>
+            <div className="card-border-red bg-gradient-to-b from-pink-950/90 to-rose-950/90 backdrop-blur-md px-8 py-6 rounded-lg animate-shake flex flex-col items-center">
+              <p className="text-5xl md:text-6xl glow-red mb-3" style={{fontFamily: "'Press Start 2P', cursive", color: '#FF006E', writingMode: 'vertical-rl', textOrientation: 'upright'}}>
                 大凶
               </p>
               <div className="h-1 w-full bg-gradient-to-r from-transparent via-pink-500 to-transparent mb-2"></div>
