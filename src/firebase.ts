@@ -32,7 +32,7 @@ const initializeFirebase = () => {
     try {
       app = initializeApp(firebaseConfig);
       database = getDatabase(app);
-      console.log('Firebase initialized successfully');
+      if (import.meta.env.DEV) console.log('Firebase initialized successfully');
     } catch (error) {
       console.error('Error initializing Firebase:', error);
     }
