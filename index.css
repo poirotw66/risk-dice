@@ -184,7 +184,35 @@ body {
   .animate-tumble,
   .animate-explode,
   .animate-shock,
-  .animate-text-slam {
+  .animate-text-slam,
+  .dice-slot-rolling {
     animation: none;
+  }
+}
+
+/* Arcane dice pedestal & glow */
+.dice-pedestal {
+  background: radial-gradient(ellipse at center, rgba(26, 16, 48, 0.92) 0%, rgba(8, 6, 18, 0.98) 72%);
+  border: 2px solid rgba(184, 134, 11, 0.45);
+  box-shadow:
+    0 0 40px rgba(1, 205, 254, 0.2),
+    0 0 80px rgba(184, 134, 11, 0.12),
+    inset 0 0 60px rgba(0, 0, 0, 0.55);
+}
+
+.dice-slot {
+  filter: drop-shadow(0 0 18px rgba(184, 134, 11, 0.35)) drop-shadow(0 0 32px rgba(1, 205, 254, 0.2));
+}
+
+.dice-slot-rolling {
+  animation: dice-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes dice-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 18px rgba(184, 134, 11, 0.4)) drop-shadow(0 0 28px rgba(1, 205, 254, 0.25));
+  }
+  50% {
+    filter: drop-shadow(0 0 30px rgba(255, 113, 206, 0.55)) drop-shadow(0 0 45px rgba(1, 205, 254, 0.4));
   }
 }
