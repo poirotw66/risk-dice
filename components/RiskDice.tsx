@@ -264,17 +264,14 @@ const createFaceTexture = (text: string, variant: FaceVariant, highlighted: bool
   return tex;
 };
 
-// 單個面的組件
+// Face label overlay; the solid icosahedron body is rendered separately.
 const DiceFace: React.FC<{
   vertices: [THREE.Vector3, THREE.Vector3, THREE.Vector3];
   normal: THREE.Vector3;
   text: string;
   variant: FaceVariant;
   isHighlighted: boolean;
-  performanceMode: boolean;
-}> = ({ vertices, normal, text, variant, isHighlighted, performanceMode }) => {
-  const palette = FACE_PALETTE[variant];
-  const isCalamity = variant === 'calamity';
+}> = ({ vertices, normal, text, variant, isHighlighted }) => {
   // 計算面的中心位置
   const center = useMemo(() => {
     return new THREE.Vector3()
@@ -282,20 +279,6 @@ const DiceFace: React.FC<{
       .add(vertices[1])
       .add(vertices[2])
       .divideScalar(3);
-  }, [vertices]);
-
-  // 創建三角形幾何體 - 使用絕對頂點坐標，確保所有面正確連接
-  const geometry = useMemo(() => {
-    const geom = new THREE.BufferGeometry();
-    // 直接使用絕對頂點坐標，不轉換為相對坐標
-    const positions = new Float32Array([
-      vertices[0].x, vertices[0].y, vertices[0].z,
-      vertices[1].x, vertices[1].y, vertices[1].z,
-      vertices[2].x, vertices[2].y, vertices[2].z,
-    ]);
-    geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geom.computeVertexNormals();
-    return geom;
   }, [vertices]);
 
   const texture = useMemo(
@@ -324,34 +307,9 @@ const DiceFace: React.FC<{
 
   return (
     <group>
-      {/* 三角形面 - 使用絕對坐標，不移動位置 */}
-      <mesh geometry={geometry}>
-        {performanceMode ? (
-          <meshStandardMaterial
-            color={palette.base}
-            metalness={0.7}
-            roughness={0.35}
-            side={THREE.FrontSide}
-            emissive={isCalamity ? new THREE.Color(palette.emissive) : isHighlighted ? new THREE.Color(palette.emissive) : new THREE.Color(0x000000)}
-            emissiveIntensity={isCalamity ? (isHighlighted ? 1.0 : 0.25) : isHighlighted ? 0.6 : 0.05}
-          />
-        ) : (
-          <meshPhysicalMaterial
-            color={palette.base}
-            metalness={0.9}
-            roughness={0.12}
-            clearcoat={1}
-            clearcoatRoughness={0.08}
-            side={THREE.FrontSide}
-            emissive={new THREE.Color(palette.emissive)}
-            emissiveIntensity={isCalamity ? (isHighlighted ? 1.2 : 0.35) : isHighlighted ? 0.85 : 0.08}
-            reflectivity={1}
-          />
-        )}
-      </mesh>
       {/* 文字平面 - 放在面的中心 */}
       <group position={center} quaternion={quaternion}>
-        <mesh position={[0, 0, 0.02]}>
+        <mesh position={[0, 0, 0.05]}>
           <planeGeometry args={[faceSize, faceSize]} />
           <meshBasicMaterial
             map={texture}
@@ -403,6 +361,51 @@ const IcosahedronDice: React.FC<{
   const invalidate = useThree((s) => s.invalidate);
 
   const faces = useMemo(() => createIcosahedronFaces(DICE_RADIUS), []);
+  const bodyGeometry = useMemo(() => {
+    const geometry = new THREE.IcosahedronGeometry(DICE_RADIUS, 0);
+    geometry.clearGroups();
+    for (let index = 0; index < 20; index += 1) {
+      geometry.addGroup(index * 3, 3, index);
+    }
+    return geometry;
+  }, []);
+  const bodyMaterials = useMemo(() => {
+    return faceVariants.map((variant, index) => {
+      const palette = FACE_PALETTE[variant];
+      const isCalamity = variant === 'calamity';
+      const isHighlighted = faceHighlights[index] ?? false;
+
+      if (performanceMode) {
+        return new THREE.MeshStandardMaterial({
+          color: palette.base,
+          metalness: 0.7,
+          roughness: 0.35,
+          side: THREE.FrontSide,
+          emissive: isCalamity || isHighlighted ? new THREE.Color(palette.emissive) : new THREE.Color(0x000000),
+          emissiveIntensity: isCalamity ? (isHighlighted ? 1.0 : 0.25) : isHighlighted ? 0.6 : 0.05,
+        });
+      }
+
+      return new THREE.MeshPhysicalMaterial({
+        color: palette.base,
+        metalness: 0.9,
+        roughness: 0.12,
+        clearcoat: 1,
+        clearcoatRoughness: 0.08,
+        side: THREE.FrontSide,
+        emissive: new THREE.Color(palette.emissive),
+        emissiveIntensity: isCalamity ? (isHighlighted ? 1.2 : 0.35) : isHighlighted ? 0.85 : 0.08,
+        reflectivity: 1,
+      });
+    });
+  }, [faceHighlights, faceVariants, performanceMode]);
+
+  useEffect(() => {
+    return () => {
+      bodyGeometry.dispose();
+      bodyMaterials.forEach((material) => material.dispose());
+    };
+  }, [bodyGeometry, bodyMaterials]);
 
   // ponytail: pause animation when tab not visible
   useEffect(() => {
@@ -511,6 +514,7 @@ const IcosahedronDice: React.FC<{
           <meshBasicMaterial color="#05FFA1" transparent opacity={0.05} />
         </mesh>
       )}
+      <mesh geometry={bodyGeometry} material={bodyMaterials} />
       <DiceEdges radius={DICE_RADIUS} />
       <DiceWireAura performanceMode={performanceMode} isRolling={isRolling} />
       {faces.map((face, index) => (
@@ -521,7 +525,6 @@ const IcosahedronDice: React.FC<{
           text={faceTexts[index] || '大吉'}
           variant={faceVariants[index] || 'neutral'}
           isHighlighted={faceHighlights[index] || false}
-          performanceMode={performanceMode}
         />
       ))}
     </group>
