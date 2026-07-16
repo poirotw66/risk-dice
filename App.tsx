@@ -49,6 +49,13 @@ export default function App() {
   const [selectedFaceIndex, setSelectedFaceIndex] = useState<number | null>(null); // 預先決定的抽中面
   const [useGlobalStreak, setUseGlobalStreak] = useState(false); // 是否使用全域 streak
   const [showDescription, setShowDescription] = useState(false); // 是否顯示說明
+  const [performanceMode, setPerformanceMode] = useState<boolean>(() => {
+    // ponytail: default ON for small screens or very high DPR
+    if (typeof window === 'undefined') return false;
+    const isSmall = window.matchMedia ? window.matchMedia('(max-width: 768px)').matches : false;
+    const dpr = (window as any).devicePixelRatio || 1;
+    return isSmall || dpr > 2.5;
+  });
   const audioContextRef = useRef<AudioContext | null>(null);
 
   // 自動儲存 state 到 localStorage
@@ -348,6 +355,16 @@ export default function App() {
               {showDescription ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
               <span>{showDescription ? '隱藏說明' : '查看說明'}</span>
             </button>
+            <div className="mt-3 flex items-center justify-center">
+              <button
+                onClick={() => setPerformanceMode(v => !v)}
+                className={`px-3 py-1 rounded-md border text-xs tracking-wider ${performanceMode ? 'border-emerald-600/60 bg-emerald-900/30 text-emerald-200' : 'border-cyan-700/60 bg-cyan-950/30 hover:bg-cyan-950/50 text-cyan-200'}`}
+                style={{fontFamily: "'VT323', monospace", fontSize: '14px'}}
+                title="切換效能模式"
+              >
+                {performanceMode ? '效能模式：開' : '效能模式：關'}
+              </button>
+            </div>
         </div>
         
         {/* Description Panel */}
@@ -505,6 +522,7 @@ export default function App() {
               <RiskDice 
                 outcome={state.outcome} 
                 isRolling={isRolling} 
+                performanceMode={performanceMode}
                 selectedFaceIndex={selectedFaceIndex}
               />
             </div>

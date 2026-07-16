@@ -7,6 +7,7 @@ interface RiskDiceProps {
   outcome: DiceOutcome;
   isRolling: boolean;
   selectedFaceIndex?: number | null; // 預先決定的抽中面（0-19）
+  performanceMode?: boolean; // ponytail: simple perf toggle
 }
 
 // 單個面的組件
@@ -212,6 +213,7 @@ const IcosahedronDice: React.FC<{
   selectedFaceIndex?: number | null; // 預先決定的抽中面（0-19）
 }> = ({ outcome, isRolling, faceTexts, faceColors, faceHighlights, selectedFaceIndex }) => {
   const groupRef = useRef<THREE.Group>(null);
+  const isPageVisibleRef = useRef<boolean>(true);
   const [detectedFaceIndex, setDetectedFaceIndex] = useState<number | null>(null);
   const rotationCompleteRef = useRef(false);
   const verificationRetryCountRef = useRef(0); // 驗證重試計數器，防止無限循環
@@ -224,6 +226,14 @@ const IcosahedronDice: React.FC<{
   // 創建正二十面體的頂點和面 - 使用標準定義
   const faces = useMemo(() => {
     return createStandardIcosahedron();
+  }, []);
+
+  // ponytail: pause animation when tab not visible
+  useEffect(() => {
+    const onVis = () => { isPageVisibleRef.current = document.visibilityState === 'visible'; };
+    onVis();
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
   }, []);
 
   // 檢測當前朝向相機的面
@@ -313,6 +323,7 @@ const IcosahedronDice: React.FC<{
 
   // 真實世界的物理轉動模擬
   useFrame((state, delta) => {
+    if (!isPageVisibleRef.current) return;
     if (isRolling && groupRef.current) {
       // 滾動時：模擬真實世界的物理轉動
       rotationCompleteRef.current = false;
@@ -450,7 +461,7 @@ const IcosahedronDice: React.FC<{
   );
 };
 
-const RiskDice: React.FC<RiskDiceProps> = ({ outcome, isRolling, selectedFaceIndex: propSelectedFaceIndex }) => {
+const RiskDice: React.FC<RiskDiceProps> = ({ outcome, isRolling, selectedFaceIndex: propSelectedFaceIndex, performanceMode = false }) => {
   // 使用傳入的預先決定的面索引，如果沒有則為 null
   const selectedFaceIndex = propSelectedFaceIndex !== undefined ? propSelectedFaceIndex : null;
 
@@ -508,19 +519,21 @@ const RiskDice: React.FC<RiskDiceProps> = ({ outcome, isRolling, selectedFaceInd
     <div className="relative w-64 h-64 z-20" style={{ minHeight: '256px' }}>
       <Canvas
         camera={{ position: [0, 0, 8], fov: 50, near: 0.1, far: 100 }}
+        dpr={performanceMode ? [1, 1.25] : [1, Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio : 1)]}
         gl={{ 
-          antialias: true, 
+          antialias: !performanceMode, 
           alpha: true,
           powerPreference: "high-performance"
         }}
+        shadows={false}
         style={{ background: 'transparent', width: '100%', height: '100%' }}
         onCreated={({ gl }) => {
           gl.setClearColor(0x000000, 0); // 透明背景
         }}
       >
-        <ambientLight intensity={1.8} />
-        <directionalLight position={[5, 5, 5]} intensity={2.5} color="#01CDFE" />
-        <directionalLight position={[-5, -5, -5]} intensity={1.5} color="#FF71CE" />
+        <ambientLight intensity={performanceMode ? 1.0 : 1.8} />
+        <directionalLight position={[5, 5, 5]} intensity={performanceMode ? 1.4 : 2.5} color="#01CDFE" />
+        <directionalLight position={[-5, -5, -5]} intensity={performanceMode ? 0.9 : 1.5} color="#FF71CE" />
         <pointLight position={[0, 0, 10]} intensity={1.2} color="#05FFA1" />
         <IcosahedronDice 
           outcome={outcome}
