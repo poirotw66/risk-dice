@@ -15,9 +15,118 @@ type FaceVariant = 'fortune' | 'calamity' | 'neutral' | 'rolling' | 'mystery';
 const FACE_PALETTE: Record<FaceVariant, { base: string; emissive: string }> = {
   neutral: { base: '#12081f', emissive: '#1a1035' },
   fortune: { base: '#064e3b', emissive: '#10b981' },
-  calamity: { base: '#3b0515', emissive: '#dc2626' },
+  calamity: { base: '#4a0510', emissive: '#ff1744' },
   rolling: { base: '#0c2d4a', emissive: '#06b6d4' },
   mystery: { base: '#1e1b4b', emissive: '#6366f1' },
+};
+
+const CALAMITY_FACE_INDEX = 0; // ponytail: single permanent skull face (matches game logic)
+
+const drawSkull = (
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  highlighted: boolean
+): void => {
+  const fill = highlighted ? '#fff5f5' : '#c9a0a0';
+  const stroke = highlighted ? '#ff1744' : '#7f1d1d';
+  const glow = highlighted ? '#ff006e' : '#b91c1c';
+
+  ctx.save();
+  if (highlighted) {
+    ctx.shadowColor = glow;
+    ctx.shadowBlur = 40;
+  }
+
+  // Crossbones behind skull when highlighted
+  if (highlighted) {
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 10;
+    ctx.lineCap = 'round';
+    ctx.globalAlpha = 0.4;
+    ctx.beginPath();
+    ctx.moveTo(x - size * 0.75, y - size * 0.55);
+    ctx.lineTo(x + size * 0.75, y + size * 0.45);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x + size * 0.75, y - size * 0.55);
+    ctx.lineTo(x - size * 0.75, y + size * 0.45);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  // Cranium
+  ctx.beginPath();
+  ctx.ellipse(x, y - size * 0.12, size * 0.58, size * 0.65, 0, 0, Math.PI * 2);
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = highlighted ? 6 : 4;
+  ctx.stroke();
+
+  // Jaw
+  ctx.beginPath();
+  ctx.moveTo(x - size * 0.48, y + size * 0.12);
+  ctx.quadraticCurveTo(x, y + size * 0.58, x + size * 0.48, y + size * 0.12);
+  ctx.lineTo(x + size * 0.4, y + size * 0.32);
+  ctx.quadraticCurveTo(x, y + size * 0.5, x - size * 0.4, y + size * 0.32);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  // Eye sockets with glowing pupils when highlighted
+  const eyeY = y - size * 0.1;
+  const eyeOffsetX = size * 0.24;
+  ctx.fillStyle = highlighted ? '#1a0505' : '#2d0a0a';
+  [[x - eyeOffsetX, eyeY], [x + eyeOffsetX, eyeY]].forEach(([ex, ey]) => {
+    ctx.beginPath();
+    ctx.ellipse(ex, ey, size * 0.17, size * 0.22, 0, 0, Math.PI * 2);
+    ctx.fill();
+    if (highlighted) {
+      ctx.fillStyle = '#ff1744';
+      ctx.beginPath();
+      ctx.arc(ex, ey, size * 0.07, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#1a0505';
+    }
+  });
+
+  // Nose cavity
+  ctx.beginPath();
+  ctx.moveTo(x, y + size * 0.02);
+  ctx.lineTo(x - size * 0.11, y + size * 0.2);
+  ctx.lineTo(x + size * 0.11, y + size * 0.2);
+  ctx.closePath();
+  ctx.fillStyle = highlighted ? '#7f1d1d' : '#450a0a';
+  ctx.fill();
+
+  // Teeth row
+  const teethY = y + size * 0.26;
+  const toothW = size * 0.075;
+  ctx.fillStyle = fill;
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 2;
+  for (let i = -3; i <= 3; i++) {
+    const tx = x + i * toothW * 1.15;
+    ctx.fillRect(tx - toothW / 2, teethY, toothW * 0.8, size * 0.13);
+    ctx.strokeRect(tx - toothW / 2, teethY, toothW * 0.8, size * 0.13);
+  }
+
+  // Cracks on skull when highlighted
+  if (highlighted) {
+    ctx.strokeStyle = '#991b1b';
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.7;
+    ctx.beginPath();
+    ctx.moveTo(x - size * 0.15, y - size * 0.45);
+    ctx.lineTo(x - size * 0.05, y - size * 0.2);
+    ctx.lineTo(x + size * 0.1, y - size * 0.35);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.restore();
 };
 
 const createFaceTexture = (text: string, variant: FaceVariant, highlighted: boolean): THREE.CanvasTexture => {
@@ -49,6 +158,40 @@ const createFaceTexture = (text: string, variant: FaceVariant, highlighted: bool
   ctx.arc(256, 256, 195, 0, Math.PI * 2);
   ctx.stroke();
   ctx.globalAlpha = 1;
+
+  if (variant === 'calamity') {
+    // Dark vignette for ominous feel
+    const vignette = ctx.createRadialGradient(256, 256, 80, 256, 256, 280);
+    vignette.addColorStop(0, 'transparent');
+    vignette.addColorStop(1, 'rgba(0, 0, 0, 0.55)');
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, 512, 512);
+
+    drawSkull(ctx, 256, 175, highlighted ? 125 : 110, highlighted);
+
+    // 大凶 text below skull
+    ctx.font = 'bold 72px "VT323", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    if (highlighted) {
+      ctx.shadowColor = s.glow;
+      ctx.shadowBlur = 25;
+    }
+    const calamityChars = text.split('');
+    const calamitySpacing = 78;
+    const calamityStartY = 370 - (calamityChars.length - 1) * calamitySpacing / 2;
+    calamityChars.forEach((char, index) => {
+      ctx.strokeStyle = s.stroke;
+      ctx.lineWidth = highlighted ? 4 : 2;
+      ctx.strokeText(char, 256, calamityStartY + index * calamitySpacing);
+      ctx.fillStyle = highlighted ? '#fecaca' : '#d4a5a5';
+      ctx.fillText(char, 256, calamityStartY + index * calamitySpacing);
+    });
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.needsUpdate = true;
+    return tex;
+  }
 
   const textColor = highlighted || variant !== 'neutral' ? s.text : '#5c4d3a';
   const fontSize = text.length <= 1 ? 220 : 155;
@@ -88,6 +231,7 @@ const DiceFace: React.FC<{
   performanceMode: boolean;
 }> = ({ vertices, normal, text, variant, isHighlighted, performanceMode }) => {
   const palette = FACE_PALETTE[variant];
+  const isCalamity = variant === 'calamity';
   // 計算面的中心位置
   const center = useMemo(() => {
     return new THREE.Vector3()
@@ -145,8 +289,8 @@ const DiceFace: React.FC<{
             metalness={0.7}
             roughness={0.35}
             side={THREE.DoubleSide}
-            emissive={isHighlighted ? new THREE.Color(palette.emissive) : new THREE.Color(0x000000)}
-            emissiveIntensity={isHighlighted ? 0.6 : 0.05}
+            emissive={isCalamity ? new THREE.Color(palette.emissive) : isHighlighted ? new THREE.Color(palette.emissive) : new THREE.Color(0x000000)}
+            emissiveIntensity={isCalamity ? (isHighlighted ? 1.0 : 0.25) : isHighlighted ? 0.6 : 0.05}
           />
         ) : (
           <meshPhysicalMaterial
@@ -156,8 +300,8 @@ const DiceFace: React.FC<{
             clearcoat={1}
             clearcoatRoughness={0.08}
             side={THREE.DoubleSide}
-            emissive={isHighlighted ? new THREE.Color(palette.emissive) : new THREE.Color(palette.emissive)}
-            emissiveIntensity={isHighlighted ? 0.85 : 0.08}
+            emissive={new THREE.Color(palette.emissive)}
+            emissiveIntensity={isCalamity ? (isHighlighted ? 1.2 : 0.35) : isHighlighted ? 0.85 : 0.08}
             reflectivity={1}
           />
         )}
@@ -545,12 +689,13 @@ const RiskDice: React.FC<RiskDiceProps> = ({ outcome, isRolling, selectedFaceInd
       let variant: FaceVariant = 'neutral';
       let highlight = false;
 
-      if (i === selectedFaceIndex && selectedFaceIndex !== null) {
-        if (outcome === DiceOutcome.GREAT_MISFORTUNE) {
-          text = '大凶';
-          variant = 'calamity';
-          highlight = true;
-        } else if (outcome === DiceOutcome.GREAT_FORTUNE) {
+      // Permanent skull face — always face index 0
+      if (i === CALAMITY_FACE_INDEX) {
+        text = '大凶';
+        variant = 'calamity';
+        highlight = outcome === DiceOutcome.GREAT_MISFORTUNE;
+      } else if (i === selectedFaceIndex && selectedFaceIndex !== null) {
+        if (outcome === DiceOutcome.GREAT_FORTUNE) {
           text = '大吉';
           variant = 'fortune';
           highlight = true;
@@ -572,7 +717,7 @@ const RiskDice: React.FC<RiskDiceProps> = ({ outcome, isRolling, selectedFaceInd
   }, [outcome, selectedFaceIndex]);
 
   return (
-    <div className={`relative w-64 h-64 z-20 dice-slot ${isRolling ? 'dice-slot-rolling' : ''}`} style={{ minHeight: '256px' }}>
+    <div className={`relative w-64 h-64 z-20 dice-slot ${isRolling ? 'dice-slot-rolling' : ''} ${outcome === DiceOutcome.GREAT_MISFORTUNE ? 'dice-slot-calamity' : ''}`} style={{ minHeight: '256px' }}>
       <Canvas
         camera={{ position: [0, 0, 8], fov: 50, near: 0.1, far: 100 }}
         frameloop={isRolling ? 'always' : 'demand'}
