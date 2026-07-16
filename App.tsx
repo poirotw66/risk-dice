@@ -22,7 +22,7 @@ const loadLocalState = (): GameState => {
     const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      console.log('Loaded from localStorage:', parsed);
+      if (import.meta.env.DEV) console.log('Loaded from localStorage:', parsed);
       return {
         streak: parsed.streak || 0,
         totalRolls: parsed.totalRolls || 0,
@@ -71,12 +71,12 @@ export default function App() {
   // 監聽 Firebase 全域 streak 和 maxStreak
   useEffect(() => {
     if (!isFirebaseAvailable()) {
-      console.log('Firebase not configured, using local streak with localStorage persistence');
+      if (import.meta.env.DEV) console.log('Firebase not configured, using local streak with localStorage persistence');
       return;
     }
 
     setUseGlobalStreak(true);
-    console.log('Firebase configured, using global streak');
+    if (import.meta.env.DEV) console.log('Firebase configured, using global streak');
 
     // 先載入初始數據
     const loadInitialData = async () => {
@@ -85,7 +85,7 @@ export default function App() {
         getGlobalMaxStreak()
       ]);
       
-      console.log('Loaded initial data from Firebase:', { streak: initialStreak, maxStreak: initialMaxStreak });
+      if (import.meta.env.DEV) console.log('Loaded initial data from Firebase:', { streak: initialStreak, maxStreak: initialMaxStreak });
       
       setState(prev => ({
         ...prev,
@@ -98,7 +98,7 @@ export default function App() {
 
     // 設置即時監聽器
     const unsubscribeStreak = listenToGlobalStreak((globalStreak) => {
-      console.log('Global streak updated:', globalStreak);
+      if (import.meta.env.DEV) console.log('Global streak updated:', globalStreak);
       setState(prev => ({
         ...prev,
         streak: globalStreak
@@ -106,7 +106,7 @@ export default function App() {
     });
 
     const unsubscribeMaxStreak = listenToGlobalMaxStreak((globalMaxStreak) => {
-      console.log('Global max streak updated:', globalMaxStreak);
+      if (import.meta.env.DEV) console.log('Global max streak updated:', globalMaxStreak);
       setState(prev => ({
         ...prev,
         maxStreak: globalMaxStreak

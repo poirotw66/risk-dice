@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useEffect, useState, useCallback } from 'react';
+import React, { useMemo, useRef, useEffect, useState, useCallback, memo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { DiceOutcome } from '../types';
@@ -519,6 +519,7 @@ const RiskDice: React.FC<RiskDiceProps> = ({ outcome, isRolling, selectedFaceInd
     <div className="relative w-64 h-64 z-20" style={{ minHeight: '256px' }}>
       <Canvas
         camera={{ position: [0, 0, 8], fov: 50, near: 0.1, far: 100 }}
+        frameloop={isRolling ? 'always' : 'demand'}
         dpr={performanceMode ? [1, 1.25] : [1, Math.min(2, typeof window !== 'undefined' ? window.devicePixelRatio : 1)]}
         gl={{ 
           antialias: !performanceMode, 
@@ -548,4 +549,13 @@ const RiskDice: React.FC<RiskDiceProps> = ({ outcome, isRolling, selectedFaceInd
   );
 };
 
-export default RiskDice;
+const RiskDiceMemo = memo(RiskDice, (prev, next) => {
+  return (
+    prev.outcome === next.outcome &&
+    prev.isRolling === next.isRolling &&
+    prev.selectedFaceIndex === next.selectedFaceIndex &&
+    (prev.performanceMode ?? false) === (next.performanceMode ?? false)
+  );
+});
+
+export default RiskDiceMemo;
