@@ -518,7 +518,7 @@ export default function App() {
         {/* The Dice - Card Slot Style */}
         <div className="mb-12 relative w-full flex justify-center h-[280px] items-center">
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-[300px] h-[300px] card-border bg-gradient-to-br from-cyan-950/50 to-pink-950/50 backdrop-blur-md rounded-lg flex items-center justify-center">
+            <div className="w-[300px] h-[300px] dice-pedestal rounded-full flex items-center justify-center">
               <RiskDice 
                 outcome={state.outcome} 
                 isRolling={isRolling} 

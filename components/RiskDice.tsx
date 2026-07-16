@@ -10,14 +10,84 @@ interface RiskDiceProps {
   performanceMode?: boolean; // ponytail: simple perf toggle
 }
 
+type FaceVariant = 'fortune' | 'calamity' | 'neutral' | 'rolling' | 'mystery';
+
+const FACE_PALETTE: Record<FaceVariant, { base: string; emissive: string }> = {
+  neutral: { base: '#12081f', emissive: '#1a1035' },
+  fortune: { base: '#064e3b', emissive: '#10b981' },
+  calamity: { base: '#3b0515', emissive: '#dc2626' },
+  rolling: { base: '#0c2d4a', emissive: '#06b6d4' },
+  mystery: { base: '#1e1b4b', emissive: '#6366f1' },
+};
+
+const createFaceTexture = (text: string, variant: FaceVariant, highlighted: boolean): THREE.CanvasTexture => {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d')!;
+
+  const styles: Record<FaceVariant, { grad: [string, string, string]; text: string; stroke: string; glow: string }> = {
+    neutral: { grad: ['#1f1535', '#0d0618', '#12081f'], text: '#8b7355', stroke: '#4a3728', glow: '#b8860b' },
+    fortune: { grad: ['#065f46', '#064e3b', '#047857'], text: '#fde68a', stroke: '#b45309', glow: '#fbbf24' },
+    calamity: { grad: ['#450a0a', '#2d0a0a', '#7f1d1d'], text: '#fecaca', stroke: '#991b1b', glow: '#ef4444' },
+    rolling: { grad: ['#0c4a6e', '#0c2d4a', '#155e75'], text: '#67e8f9', stroke: '#0891b2', glow: '#22d3ee' },
+    mystery: { grad: ['#312e81', '#1e1b4b', '#3730a3'], text: '#c4b5fd', stroke: '#6d28d9', glow: '#a78bfa' },
+  };
+  const s = styles[variant];
+
+  const grad = ctx.createRadialGradient(256, 256, 20, 256, 256, 280);
+  grad.addColorStop(0, s.grad[0]);
+  grad.addColorStop(0.7, s.grad[1]);
+  grad.addColorStop(1, s.grad[2]);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 512, 512);
+
+  ctx.strokeStyle = s.stroke;
+  ctx.lineWidth = 6;
+  ctx.globalAlpha = 0.55;
+  ctx.beginPath();
+  ctx.arc(256, 256, 195, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  const textColor = highlighted || variant !== 'neutral' ? s.text : '#5c4d3a';
+  const fontSize = text.length <= 1 ? 220 : 155;
+  ctx.font = `bold ${fontSize}px "VT323", monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  if (highlighted) {
+    ctx.shadowColor = s.glow;
+    ctx.shadowBlur = 30;
+  }
+
+  const chars = text.split('');
+  const charSpacing = text.length === 2 ? 165 : 190;
+  const startY = 256 - (chars.length - 1) * charSpacing / 2;
+
+  chars.forEach((char, index) => {
+    ctx.strokeStyle = s.stroke;
+    ctx.lineWidth = highlighted ? 5 : 3;
+    ctx.strokeText(char, 256, startY + index * charSpacing);
+    ctx.fillStyle = textColor;
+    ctx.fillText(char, 256, startY + index * charSpacing);
+  });
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  return tex;
+};
+
 // 單個面的組件
 const DiceFace: React.FC<{
   vertices: [THREE.Vector3, THREE.Vector3, THREE.Vector3];
   normal: THREE.Vector3;
   text: string;
-  color: string;
+  variant: FaceVariant;
   isHighlighted: boolean;
-}> = ({ vertices, normal, text, color, isHighlighted }) => {
+  performanceMode: boolean;
+}> = ({ vertices, normal, text, variant, isHighlighted, performanceMode }) => {
+  const palette = FACE_PALETTE[variant];
   // 計算面的中心位置
   const center = useMemo(() => {
     return new THREE.Vector3()
@@ -41,44 +111,10 @@ const DiceFace: React.FC<{
     return geom;
   }, [vertices]);
 
-  // 創建文字紋理
-  const texture = useMemo(() => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 512;
-    const ctx = canvas.getContext('2d')!;
-
-    ctx.clearRect(0, 0, 512, 512);
-
-    // Card game style text colors with stronger contrast
-    const textColor = isHighlighted 
-      ? (color === '#7f1d1d' ? '#FCA5A5' : '#FDE047') // Brighter colors for highlights
-      : '#94A3B8'; // Slate for non-highlighted
-    
-    ctx.fillStyle = textColor;
-    ctx.font = 'bold 180px "VT323", monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    // Add glow effect for highlighted faces
-    if (isHighlighted) {
-      ctx.shadowColor = textColor;
-      ctx.shadowBlur = 20;
-    }
-
-    // 豎向書寫文字（從上到下）
-    const chars = text.split('');
-    const charSpacing = 190; // 字符間距
-    const startY = 256 - (chars.length - 1) * charSpacing / 2; // 居中起始位置
-    
-    chars.forEach((char, index) => {
-      ctx.fillText(char, 256, startY + index * charSpacing);
-    });
-
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.needsUpdate = true;
-    return tex;
-  }, [text, color, isHighlighted]);
+  const texture = useMemo(
+    () => createFaceTexture(text, variant, isHighlighted),
+    [text, variant, isHighlighted]
+  );
 
   // 計算旋轉以讓面朝向正確方向
   const quaternion = useMemo(() => {
@@ -103,14 +139,28 @@ const DiceFace: React.FC<{
     <group>
       {/* 三角形面 - 使用絕對坐標，不移動位置 */}
       <mesh geometry={geometry}>
-        <meshStandardMaterial
-          color={color}
-          metalness={0.4}
-          roughness={0.6}
-          side={THREE.DoubleSide}
-          emissive={isHighlighted ? new THREE.Color(color).multiplyScalar(0.6) : new THREE.Color(0x000000)}
-          emissiveIntensity={isHighlighted ? 0.8 : 0}
-        />
+        {performanceMode ? (
+          <meshStandardMaterial
+            color={palette.base}
+            metalness={0.7}
+            roughness={0.35}
+            side={THREE.DoubleSide}
+            emissive={isHighlighted ? new THREE.Color(palette.emissive) : new THREE.Color(0x000000)}
+            emissiveIntensity={isHighlighted ? 0.6 : 0.05}
+          />
+        ) : (
+          <meshPhysicalMaterial
+            color={palette.base}
+            metalness={0.9}
+            roughness={0.12}
+            clearcoat={1}
+            clearcoatRoughness={0.08}
+            side={THREE.DoubleSide}
+            emissive={isHighlighted ? new THREE.Color(palette.emissive) : new THREE.Color(palette.emissive)}
+            emissiveIntensity={isHighlighted ? 0.85 : 0.08}
+            reflectivity={1}
+          />
+        )}
       </mesh>
       {/* 文字平面 - 放在面的中心 */}
       <group position={center} quaternion={quaternion}>
@@ -189,18 +239,29 @@ const createStandardIcosahedron = () => {
     });
   }
 
-  console.log(`Created ${faceData.length} faces for standard icosahedron`);
-  
-  // 驗證所有面都是等邊三角形
-  if (faceData.length > 0) {
-    const firstFace = faceData[0];
-    const d1 = firstFace.vertices[0].distanceTo(firstFace.vertices[1]);
-    const d2 = firstFace.vertices[1].distanceTo(firstFace.vertices[2]);
-    const d3 = firstFace.vertices[2].distanceTo(firstFace.vertices[0]);
-    console.log('First face edge lengths:', { d1, d2, d3, avg: (d1 + d2 + d3) / 3 });
-  }
-  
   return faceData;
+};
+
+const DiceWireAura: React.FC<{ performanceMode: boolean; isRolling: boolean }> = ({ performanceMode, isRolling }) => {
+  const ref = useRef<THREE.Mesh>(null);
+
+  useFrame((_, delta) => {
+    if (ref.current) ref.current.rotation.y += delta * (isRolling ? 0.4 : 0.12);
+  });
+
+  if (performanceMode) return null;
+
+  return (
+    <mesh ref={ref}>
+      <icosahedronGeometry args={[2.08, 0]} />
+      <meshBasicMaterial
+        color={isRolling ? '#FF71CE' : '#B8860B'}
+        wireframe
+        transparent
+        opacity={isRolling ? 0.28 : 0.18}
+      />
+    </mesh>
+  );
 };
 
 // 正二十面體組件
@@ -208,10 +269,11 @@ const IcosahedronDice: React.FC<{
   outcome: DiceOutcome;
   isRolling: boolean;
   faceTexts: string[];
-  faceColors: string[];
+  faceVariants: FaceVariant[];
   faceHighlights: boolean[];
-  selectedFaceIndex?: number | null; // 預先決定的抽中面（0-19）
-}> = ({ outcome, isRolling, faceTexts, faceColors, faceHighlights, selectedFaceIndex }) => {
+  selectedFaceIndex?: number | null;
+  performanceMode: boolean;
+}> = ({ outcome, isRolling, faceTexts, faceVariants, faceHighlights, selectedFaceIndex, performanceMode }) => {
   const groupRef = useRef<THREE.Group>(null);
   const isPageVisibleRef = useRef<boolean>(true);
   const [detectedFaceIndex, setDetectedFaceIndex] = useState<number | null>(null);
@@ -434,10 +496,8 @@ const IcosahedronDice: React.FC<{
 
   // 確保有20個面
   useEffect(() => {
-    if (faces.length !== 20) {
+    if (faces.length !== 20 && import.meta.env.DEV) {
       console.warn(`Expected 20 faces, got ${faces.length}`);
-    } else {
-      console.log('Icosahedron created successfully with 20 faces');
     }
   }, [faces.length]);
 
@@ -447,14 +507,22 @@ const IcosahedronDice: React.FC<{
 
   return (
     <group ref={groupRef}>
+      {!performanceMode && (
+        <mesh>
+          <icosahedronGeometry args={[1.88, 0]} />
+          <meshBasicMaterial color="#05FFA1" transparent opacity={0.05} />
+        </mesh>
+      )}
+      <DiceWireAura performanceMode={performanceMode} isRolling={isRolling} />
       {faces.map((face, index) => (
         <DiceFace
           key={`face-${index}`}
           vertices={face.vertices}
           normal={face.normal}
           text={faceTexts[index] || '大吉'}
-          color={faceColors[index] || '#1e293b'}
+          variant={faceVariants[index] || 'neutral'}
           isHighlighted={faceHighlights[index] || false}
+          performanceMode={performanceMode}
         />
       ))}
     </group>
@@ -467,56 +535,44 @@ const RiskDice: React.FC<RiskDiceProps> = ({ outcome, isRolling, selectedFaceInd
 
   // 計算每個面的文字、顏色和高亮狀態
   // 使用預先決定的面索引（selectedFaceIndex）作為抽中的面，根據結果上色
-  const { faceTexts, faceColors, faceHighlights } = useMemo(() => {
+  const { faceTexts, faceVariants, faceHighlights } = useMemo(() => {
     const texts: string[] = [];
-    const colors: string[] = [];
+    const variants: FaceVariant[] = [];
     const highlights: boolean[] = [];
 
     for (let i = 0; i < 20; i++) {
       let text = '大吉';
-      let color = '#1e293b'; // slate-800
+      let variant: FaceVariant = 'neutral';
       let highlight = false;
 
-      // 如果這個面是預先決定的抽中面，根據結果上色
-      // 在滾動時也顯示顏色，讓用戶知道哪個面會被抽中
       if (i === selectedFaceIndex && selectedFaceIndex !== null) {
-        // 如果還在滾動，根據 outcome 判斷（但 outcome 可能是 ROLLING）
-        // 如果已經停止，根據最終 outcome 上色
         if (outcome === DiceOutcome.GREAT_MISFORTUNE) {
           text = '大凶';
-          color = '#C2185B'; // pink-700 - vaporwave hot pink
+          variant = 'calamity';
           highlight = true;
         } else if (outcome === DiceOutcome.GREAT_FORTUNE) {
           text = '大吉';
-          color = '#00897B'; // teal-700 - vaporwave mint/teal
+          variant = 'fortune';
           highlight = true;
         } else if (outcome === DiceOutcome.ROLLING) {
-          // 滾動時，暫時顯示為灰色，但標記為高亮
           text = '??';
-          color = '#0097A7'; // cyan-700 - vaporwave cyan
-          highlight = false; // 滾動時不高亮
+          variant = 'rolling';
         } else {
           text = '??';
-          color = '#0097A7'; // cyan-700
-          highlight = false;
+          variant = 'mystery';
         }
-      } else {
-        // 其他面保持默認樣式 - darker for better contrast with cyan/pink theme
-        text = '大吉';
-        color = '#1A237E'; // indigo-950 - dark blue for vaporwave
-        highlight = false;
       }
 
       texts.push(text);
-      colors.push(color);
+      variants.push(variant);
       highlights.push(highlight);
     }
 
-    return { faceTexts: texts, faceColors: colors, faceHighlights: highlights };
+    return { faceTexts: texts, faceVariants: variants, faceHighlights: highlights };
   }, [outcome, selectedFaceIndex]);
 
   return (
-    <div className="relative w-64 h-64 z-20" style={{ minHeight: '256px' }}>
+    <div className={`relative w-64 h-64 z-20 dice-slot ${isRolling ? 'dice-slot-rolling' : ''}`} style={{ minHeight: '256px' }}>
       <Canvas
         camera={{ position: [0, 0, 8], fov: 50, near: 0.1, far: 100 }}
         frameloop={isRolling ? 'always' : 'demand'}
@@ -532,17 +588,19 @@ const RiskDice: React.FC<RiskDiceProps> = ({ outcome, isRolling, selectedFaceInd
           gl.setClearColor(0x000000, 0); // 透明背景
         }}
       >
-        <ambientLight intensity={performanceMode ? 1.0 : 1.8} />
-        <directionalLight position={[5, 5, 5]} intensity={performanceMode ? 1.4 : 2.5} color="#01CDFE" />
-        <directionalLight position={[-5, -5, -5]} intensity={performanceMode ? 0.9 : 1.5} color="#FF71CE" />
-        <pointLight position={[0, 0, 10]} intensity={1.2} color="#05FFA1" />
+        <ambientLight intensity={performanceMode ? 0.8 : 1.2} />
+        <directionalLight position={[5, 5, 5]} intensity={performanceMode ? 1.2 : 2.0} color="#B8860B" />
+        <directionalLight position={[-5, -5, -5]} intensity={performanceMode ? 0.7 : 1.2} color="#01CDFE" />
+        <pointLight position={[0, 0, 10]} intensity={performanceMode ? 0.8 : 1.5} color="#05FFA1" />
+        <pointLight position={[0, -5, 5]} intensity={0.6} color="#FF71CE" />
         <IcosahedronDice 
           outcome={outcome}
           isRolling={isRolling}
           faceTexts={faceTexts}
-          faceColors={faceColors}
+          faceVariants={faceVariants}
           faceHighlights={faceHighlights}
           selectedFaceIndex={selectedFaceIndex}
+          performanceMode={performanceMode}
         />
       </Canvas>
     </div>
