@@ -1,5 +1,5 @@
-import React, { useMemo, useRef, useEffect, useState, useCallback, memo } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import React, { useMemo, useRef, useEffect, useCallback, memo } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { DiceOutcome } from '../types';
 
@@ -21,6 +21,49 @@ const FACE_PALETTE: Record<FaceVariant, { base: string; emissive: string }> = {
 };
 
 const CALAMITY_FACE_INDEX = 0; // ponytail: single permanent skull face (matches game logic)
+const DICE_RADIUS = 2;
+
+/** Extract 20 equilateral faces from Three.js canonical icosahedron */
+const createIcosahedronFaces = (radius: number) => {
+  const geometry = new THREE.IcosahedronGeometry(radius, 0);
+  const position = geometry.attributes.position;
+  const faces: { vertices: [THREE.Vector3, THREE.Vector3, THREE.Vector3]; normal: THREE.Vector3 }[] = [];
+
+  for (let i = 0; i < position.count; i += 3) {
+    const v1 = new THREE.Vector3().fromBufferAttribute(position, i);
+    const v2 = new THREE.Vector3().fromBufferAttribute(position, i + 1);
+    const v3 = new THREE.Vector3().fromBufferAttribute(position, i + 2);
+
+    const edge1 = new THREE.Vector3().subVectors(v2, v1);
+    const edge2 = new THREE.Vector3().subVectors(v3, v1);
+    const normal = new THREE.Vector3().crossVectors(edge1, edge2).normalize();
+    const center = new THREE.Vector3().add(v1).add(v2).add(v3).divideScalar(3);
+
+    if (normal.dot(center) < 0) {
+      faces.push({ vertices: [v1, v3, v2], normal: normal.clone().negate() });
+    } else {
+      faces.push({ vertices: [v1, v2, v3], normal });
+    }
+  }
+
+  geometry.dispose();
+  return faces;
+};
+
+const DiceEdges: React.FC<{ radius: number }> = ({ radius }) => {
+  const edgeGeometry = useMemo(() => {
+    const ico = new THREE.IcosahedronGeometry(radius, 0);
+    const edges = new THREE.EdgesGeometry(ico);
+    ico.dispose();
+    return edges;
+  }, [radius]);
+
+  return (
+    <lineSegments geometry={edgeGeometry}>
+      <lineBasicMaterial color="#B8860B" transparent opacity={0.4} />
+    </lineSegments>
+  );
+};
 
 const drawSkull = (
   ctx: CanvasRenderingContext2D,
@@ -288,7 +331,7 @@ const DiceFace: React.FC<{
             color={palette.base}
             metalness={0.7}
             roughness={0.35}
-            side={THREE.DoubleSide}
+            side={THREE.FrontSide}
             emissive={isCalamity ? new THREE.Color(palette.emissive) : isHighlighted ? new THREE.Color(palette.emissive) : new THREE.Color(0x000000)}
             emissiveIntensity={isCalamity ? (isHighlighted ? 1.0 : 0.25) : isHighlighted ? 0.6 : 0.05}
           />
@@ -299,7 +342,7 @@ const DiceFace: React.FC<{
             roughness={0.12}
             clearcoat={1}
             clearcoatRoughness={0.08}
-            side={THREE.DoubleSide}
+            side={THREE.FrontSide}
             emissive={new THREE.Color(palette.emissive)}
             emissiveIntensity={isCalamity ? (isHighlighted ? 1.2 : 0.35) : isHighlighted ? 0.85 : 0.08}
             reflectivity={1}
@@ -321,71 +364,6 @@ const DiceFace: React.FC<{
   );
 };
 
-// 創建標準正二十面體（使用 Three.js 的標準定義）
-const createStandardIcosahedron = () => {
-  const radius = 2;
-  const phi = (1.0 + Math.sqrt(5.0)) / 2.0; // 黃金比例
-  
-  // 正二十面體的12個頂點（標準坐標）
-  const vertices = [
-    new THREE.Vector3(-1, phi, 0).normalize().multiplyScalar(radius),
-    new THREE.Vector3(1, phi, 0).normalize().multiplyScalar(radius),
-    new THREE.Vector3(-1, -phi, 0).normalize().multiplyScalar(radius),
-    new THREE.Vector3(1, -phi, 0).normalize().multiplyScalar(radius),
-    new THREE.Vector3(0, -1, phi).normalize().multiplyScalar(radius),
-    new THREE.Vector3(0, 1, phi).normalize().multiplyScalar(radius),
-    new THREE.Vector3(0, -1, -phi).normalize().multiplyScalar(radius),
-    new THREE.Vector3(0, 1, -phi).normalize().multiplyScalar(radius),
-    new THREE.Vector3(phi, 0, -1).normalize().multiplyScalar(radius),
-    new THREE.Vector3(phi, 0, 1).normalize().multiplyScalar(radius),
-    new THREE.Vector3(-phi, 0, -1).normalize().multiplyScalar(radius),
-    new THREE.Vector3(-phi, 0, 1).normalize().multiplyScalar(radius),
-  ];
-
-  // 正二十面體的20個面的頂點索引（確保頂點順序正確，法向量指向外）
-  // 每個面的頂點順序應該是逆時針（從外看）
-  const faceIndices = [
-    [0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11],
-    [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8],
-    [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9],
-    [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1],
-  ];
-
-  const faceData: { vertices: [THREE.Vector3, THREE.Vector3, THREE.Vector3]; normal: THREE.Vector3 }[] = [];
-
-  for (const indices of faceIndices) {
-    const v1 = vertices[indices[0]].clone();
-    const v2 = vertices[indices[1]].clone();
-    const v3 = vertices[indices[2]].clone();
-
-    // 計算面的法向量（使用叉積）
-    const edge1 = new THREE.Vector3().subVectors(v2, v1);
-    const edge2 = new THREE.Vector3().subVectors(v3, v1);
-    let normal = new THREE.Vector3()
-      .crossVectors(edge1, edge2)
-      .normalize();
-
-    // 確保法向量指向外（從原點指向面的中心）
-    const faceCenter = new THREE.Vector3()
-      .add(v1)
-      .add(v2)
-      .add(v3)
-      .divideScalar(3);
-    
-    // 如果法向量與中心向量方向相反，則翻轉
-    if (normal.dot(faceCenter) < 0) {
-      normal.negate();
-    }
-
-    faceData.push({
-      vertices: [v1, v2, v3],
-      normal: normal,
-    });
-  }
-
-  return faceData;
-};
-
 const DiceWireAura: React.FC<{ performanceMode: boolean; isRolling: boolean }> = ({ performanceMode, isRolling }) => {
   const ref = useRef<THREE.Mesh>(null);
 
@@ -397,7 +375,7 @@ const DiceWireAura: React.FC<{ performanceMode: boolean; isRolling: boolean }> =
 
   return (
     <mesh ref={ref}>
-      <icosahedronGeometry args={[2.08, 0]} />
+      <icosahedronGeometry args={[DICE_RADIUS * 1.04, 0]} />
       <meshBasicMaterial
         color={isRolling ? '#FF71CE' : '#B8860B'}
         wireframe
@@ -410,29 +388,21 @@ const DiceWireAura: React.FC<{ performanceMode: boolean; isRolling: boolean }> =
 
 // 正二十面體組件
 const IcosahedronDice: React.FC<{
-  outcome: DiceOutcome;
   isRolling: boolean;
   faceTexts: string[];
   faceVariants: FaceVariant[];
   faceHighlights: boolean[];
   selectedFaceIndex?: number | null;
   performanceMode: boolean;
-}> = ({ outcome, isRolling, faceTexts, faceVariants, faceHighlights, selectedFaceIndex, performanceMode }) => {
+}> = ({ isRolling, faceTexts, faceVariants, faceHighlights, selectedFaceIndex, performanceMode }) => {
   const groupRef = useRef<THREE.Group>(null);
   const isPageVisibleRef = useRef<boolean>(true);
-  const [detectedFaceIndex, setDetectedFaceIndex] = useState<number | null>(null);
   const rotationCompleteRef = useRef(false);
-  const verificationRetryCountRef = useRef(0); // 驗證重試計數器，防止無限循環
-  
-  // 物理模擬：角速度（用於真實世界的轉動）
   const angularVelocityRef = useRef(new THREE.Vector3(0, 0, 0));
-  const targetAngularVelocityRef = useRef(new THREE.Vector3(0, 0, 0));
-  const randomOffsetRef = useRef(new THREE.Vector3(0, 0, 0)); // 穩定的隨機偏移，避免每幀變化
+  const isSettlingRef = useRef(false);
+  const invalidate = useThree((s) => s.invalidate);
 
-  // 創建正二十面體的頂點和面 - 使用標準定義
-  const faces = useMemo(() => {
-    return createStandardIcosahedron();
-  }, []);
+  const faces = useMemo(() => createIcosahedronFaces(DICE_RADIUS), []);
 
   // ponytail: pause animation when tab not visible
   useEffect(() => {
@@ -441,32 +411,6 @@ const IcosahedronDice: React.FC<{
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
   }, []);
-
-  // 檢測當前朝向相機的面
-  const detectFacingFace = useCallback(() => {
-    if (!groupRef.current || faces.length === 0) return -1;
-    
-    const cameraDirection = new THREE.Vector3(0, 0, 1); // 相機方向（Z軸正方向）
-    let maxDot = -Infinity;
-    let facingFaceIndex = 0;
-    
-    // 遍歷所有面，找到法向量與相機方向點積最大的面
-    faces.forEach((face, index) => {
-      // 將面的法向量轉換到世界坐標系
-      const worldNormal = face.normal.clone();
-      worldNormal.applyQuaternion(groupRef.current!.quaternion);
-      
-      // 計算點積（越大表示越朝向相機）
-      const dot = worldNormal.dot(cameraDirection);
-      
-      if (dot > maxDot) {
-        maxDot = dot;
-        facingFaceIndex = index;
-      }
-    });
-    
-    return facingFaceIndex;
-  }, [faces]);
 
   // 計算讓指定面朝向相機的旋轉（使用四元數，更精確）
   const calculateTargetQuaternion = useCallback((faceIndex: number) => {
@@ -487,154 +431,64 @@ const IcosahedronDice: React.FC<{
     return quaternion;
   }, [faces]);
 
-  // 當開始滾動時，重置旋轉完成標記和物理狀態
+  // Start roll: random tumble axis — no steering toward outcome during roll
   useEffect(() => {
     if (isRolling) {
       rotationCompleteRef.current = false;
-      verificationRetryCountRef.current = 0; // 重置驗證重試計數
-      // 重置角速度，給一個更平滑的初始隨機角速度
-      angularVelocityRef.current.set(
-        (Math.random() - 0.5) * 5,
-        (Math.random() - 0.5) * 5,
-        (Math.random() - 0.5) * 5
-      );
-      targetAngularVelocityRef.current.set(0, 0, 0);
-      // 生成穩定的隨機偏移（在滾動期間保持不變，降低幅度）
-      randomOffsetRef.current.set(
-        (Math.random() - 0.5) * 1.5,
-        (Math.random() - 0.5) * 1.5,
-        (Math.random() - 0.5) * 1.5
-      );
-    } else {
-      // 停止滾動時，清除角速度以便快速對齊到目標面
+      isSettlingRef.current = false;
+
+      const axis = new THREE.Vector3(
+        Math.random() * 2 - 1,
+        Math.random() * 2 - 1,
+        Math.random() * 2 - 1
+      ).normalize();
+      const speed = 14 + Math.random() * 10;
+      angularVelocityRef.current.copy(axis).multiplyScalar(speed);
+    } else if (selectedFaceIndex !== null && selectedFaceIndex !== undefined) {
+      isSettlingRef.current = true;
       angularVelocityRef.current.set(0, 0, 0);
     }
-  }, [isRolling]);
+  }, [isRolling, selectedFaceIndex]);
 
-  // 計算目標旋轉四元數（讓上色的那一面完整朝向使用者）
   const targetQuaternion = useMemo(() => {
-    // 必須使用上色的那一面（selectedFaceIndex），如果還沒有則不旋轉
-    // 只有在 selectedFaceIndex 設置後才開始旋轉
-    const faceIndex = selectedFaceIndex !== null && selectedFaceIndex !== undefined
-      ? selectedFaceIndex
-      : null; // 如果還沒有上色，返回 null，不旋轉
-    
-    // 如果目標面改變，重置旋轉完成標記
-    if (faceIndex !== null && faceIndex !== detectedFaceIndex && !isRolling) {
-      rotationCompleteRef.current = false;
+    if (selectedFaceIndex === null || selectedFaceIndex === undefined) {
+      return new THREE.Quaternion();
     }
-    
-    return faceIndex !== null ? calculateTargetQuaternion(faceIndex) : new THREE.Quaternion();
-  }, [selectedFaceIndex, detectedFaceIndex, calculateTargetQuaternion, isRolling]);
+    return calculateTargetQuaternion(selectedFaceIndex);
+  }, [selectedFaceIndex, calculateTargetQuaternion]);
 
-  // 真實世界的物理轉動模擬
-  useFrame((state, delta) => {
-    if (!isPageVisibleRef.current) return;
-    if (isRolling && groupRef.current) {
-      // 滾動時：模擬真實世界的物理轉動
-      rotationCompleteRef.current = false;
-      
-      if (selectedFaceIndex !== null && selectedFaceIndex !== undefined) {
-        // 簡化滾動邏輯：使用穩定的旋轉，朝向目標面但不過度修正
-        const currentQuat = groupRef.current.quaternion;
-        const targetQuat = targetQuaternion;
-        
-        // 計算朝向目標的角速度（溫和的引導）
-        const diffQuat = new THREE.Quaternion().multiplyQuaternions(
-          targetQuat.clone().invert(),
-          currentQuat
-        );
-        
-        const axis = new THREE.Vector3();
-        const angle = Math.acos(Math.max(-1, Math.min(1, diffQuat.w))) * 2;
-        
-        if (angle > 0.0001) {
-          const s = Math.sin(angle / 2);
-          axis.set(diffQuat.x / s, diffQuat.y / s, diffQuat.z / s).normalize();
-        } else {
-          axis.set(0, 0, 1);
-        }
-        
-        // 使用更溫和的目標速度
-        const targetSpeed = 3.0; // 降低速度使動畫更自然
-        
-        // 計算目標角速度（朝著目標方向）加上穩定的隨機偏移
-        targetAngularVelocityRef.current.copy(axis).multiplyScalar(angle * targetSpeed);
-        targetAngularVelocityRef.current.add(randomOffsetRef.current);
-      } else {
-        // 如果還不知道目標面，則使用溫和的隨機旋轉
-        targetAngularVelocityRef.current.set(
-          (Math.random() - 0.5) * 6,
-          (Math.random() - 0.5) * 6,
-          (Math.random() - 0.5) * 6
-        );
+  // Physics: free tumble while rolling, ease-out settle when stopped
+  useFrame((_, delta) => {
+    if (!isPageVisibleRef.current || !groupRef.current) return;
+    const dt = Math.min(delta, 0.05);
+
+    if (isRolling) {
+      const omega = angularVelocityRef.current;
+      const speed = omega.length();
+      if (speed > 0.001) {
+        const spinAxis = omega.clone().normalize();
+        const spin = new THREE.Quaternion().setFromAxisAngle(spinAxis, speed * dt);
+        groupRef.current.quaternion.premultiply(spin);
+        omega.multiplyScalar(Math.exp(-2.8 * dt));
       }
-      
-      // 平滑地插值到目標角速度（更高的阻尼係數）
-      const damping = 0.15; // 使用更溫和的插值
-      angularVelocityRef.current.lerp(targetAngularVelocityRef.current, damping);
-      
-      // 應用角速度到旋轉
-      const rotationQuat = new THREE.Quaternion();
-      const axis = new THREE.Vector3();
-      const length = angularVelocityRef.current.length();
-      if (length > 0.0001) {
-        axis.copy(angularVelocityRef.current).normalize();
-        rotationQuat.setFromAxisAngle(axis, length * delta);
-        groupRef.current.quaternion.multiplyQuaternions(rotationQuat, groupRef.current.quaternion);
-      }
-      
-      // 模擬摩擦力：逐漸減速
-      angularVelocityRef.current.multiplyScalar(0.96);
-      
-    } else if (groupRef.current && !isRolling && selectedFaceIndex !== null && selectedFaceIndex !== undefined) {
-      // 如果已經完成對齊，完全停止所有操作（避免抖動）
-      if (rotationCompleteRef.current) {
-        angularVelocityRef.current.set(0, 0, 0);
-        return;
-      }
-      
-      // 停止滾動後：快速對齊到目標面
-      const currentQuat = groupRef.current.quaternion;
-      const targetQuat = targetQuaternion;
-      
-      // 計算當前角度差
-      const angle = currentQuat.angleTo(targetQuat);
-      
-      // 直接使用球面插值對齊到目標面（快速且流暢）
-      const speed = 8.0; // 使用較快的速度確保快速對齊
-      const lerpFactor = Math.min(1, delta * speed);
-      currentQuat.slerp(targetQuat, lerpFactor);
-      
-      // 當非常接近目標時，直接設置為目標值並停止
-      const threshold = 0.01; // 放寬閾值
-      if (angle < threshold) {
-        // 強制對齊到目標面
-        groupRef.current.quaternion.copy(targetQuat);
-        angularVelocityRef.current.set(0, 0, 0);
-        
-        // 標記為完成
-        rotationCompleteRef.current = true;
-        
-        // 驗證並同步狀態
-        const actualFacingFace = detectFacingFace();
-        if (actualFacingFace === selectedFaceIndex) {
-          if (detectedFaceIndex !== selectedFaceIndex) {
-            setDetectedFaceIndex(selectedFaceIndex);
-          }
-          verificationRetryCountRef.current = 0;
-        } else {
-          verificationRetryCountRef.current += 1;
-          if (verificationRetryCountRef.current < 3) {
-            console.warn(`Rotation verification failed (attempt ${verificationRetryCountRef.current}): expected face ${selectedFaceIndex}, got ${actualFacingFace}. Re-aligning...`);
-            rotationCompleteRef.current = false;
-          } else {
-            console.warn(`Rotation verification failed after ${verificationRetryCountRef.current} attempts. Forcing alignment to face ${selectedFaceIndex}.`);
-            setDetectedFaceIndex(selectedFaceIndex);
-            verificationRetryCountRef.current = 0;
-          }
-        }
-      }
+      invalidate();
+      return;
+    }
+
+    if (!isSettlingRef.current || selectedFaceIndex === null || selectedFaceIndex === undefined) return;
+    if (rotationCompleteRef.current) return;
+
+    const currentQuat = groupRef.current.quaternion;
+    const targetQuat = targetQuaternion;
+    const angle = currentQuat.angleTo(targetQuat);
+    const settleFactor = 1 - Math.exp(-7 * dt);
+    currentQuat.slerp(targetQuat, settleFactor);
+    invalidate();
+
+    if (angle < 0.008) {
+      groupRef.current.quaternion.copy(targetQuat);
+      rotationCompleteRef.current = true;
+      isSettlingRef.current = false;
     }
   });
 
@@ -653,10 +507,11 @@ const IcosahedronDice: React.FC<{
     <group ref={groupRef}>
       {!performanceMode && (
         <mesh>
-          <icosahedronGeometry args={[1.88, 0]} />
+          <icosahedronGeometry args={[DICE_RADIUS * 0.94, 0]} />
           <meshBasicMaterial color="#05FFA1" transparent opacity={0.05} />
         </mesh>
       )}
+      <DiceEdges radius={DICE_RADIUS} />
       <DiceWireAura performanceMode={performanceMode} isRolling={isRolling} />
       {faces.map((face, index) => (
         <DiceFace
@@ -739,7 +594,6 @@ const RiskDice: React.FC<RiskDiceProps> = ({ outcome, isRolling, selectedFaceInd
         <pointLight position={[0, 0, 10]} intensity={performanceMode ? 0.8 : 1.5} color="#05FFA1" />
         <pointLight position={[0, -5, 5]} intensity={0.6} color="#FF71CE" />
         <IcosahedronDice 
-          outcome={outcome}
           isRolling={isRolling}
           faceTexts={faceTexts}
           faceVariants={faceVariants}

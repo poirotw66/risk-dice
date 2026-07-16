@@ -278,7 +278,7 @@ export default function App() {
           });
         }
       }
-    }, 1200);
+    }, 1800);
   };
 
   return (
