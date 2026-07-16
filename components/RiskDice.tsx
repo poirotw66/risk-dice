@@ -421,8 +421,8 @@ const IcosahedronDice: React.FC<{
     // 指定面的法向量
     const faceNormal = faces[faceIndex].normal.clone().normalize();
     
-    // 目標方向是朝向相機（Z軸正方向，即 [0, 0, 1]）
-    const targetDirection = new THREE.Vector3(0, 0, 1);
+    // R3F camera 在 z=+8 並看向原點，所以「朝向相機」的方向是 -Z
+    const targetDirection = new THREE.Vector3(0, 0, -1);
     
     // 計算旋轉四元數，將法向量對齊到目標方向
     const quaternion = new THREE.Quaternion();
