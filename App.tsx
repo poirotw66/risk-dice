@@ -1,20 +1,36 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { DiceOutcome, GameState } from './types';
 import RiskDice from './components/RiskDice';
-import { Sparkles, History, Trophy, AlertTriangle, Skull, Zap, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react';
-import { 
+import ParticleField, { ParticleFieldHandle } from './components/ParticleField';
+import { Sparkles, History, Trophy, AlertTriangle, Skull, Zap, TrendingUp, ChevronDown, ChevronUp, Volume2, VolumeX, Flame } from 'lucide-react';
+import { getTier, getTierIndex, nextMilestone, milestoneProgress, isMilestone } from './src/streak';
+import * as sfx from './src/sound';
+import {
   listenToGlobalStreak,
   listenToGlobalMaxStreak,
   getGlobalStreak,
   getGlobalMaxStreak,
-  incrementGlobalStreak, 
+  incrementGlobalStreak,
   resetGlobalStreak,
-  isFirebaseAvailable 
+  isFirebaseAvailable
 } from './src/firebase';
 
 // Configuration
 const SIDES = 20;
 const LOCAL_STORAGE_KEY = 'risk-dice-state';
+const ROLL_DURATION = 1800;
+/** The die is still spinning down when the roll timer ends — pay off on landing */
+const REVEAL_DELAY = 520;
+
+const vibrate = (pattern: number | number[]) => {
+  try {
+    navigator.vibrate?.(pattern);
+  } catch {
+    /* not supported — no-op */
+  }
+};
+
+const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
 
 // 從 localStorage 載入初始狀態
 const loadLocalState = (): GameState => {
@@ -56,7 +72,75 @@ export default function App() {
     const dpr = (window as any).devicePixelRatio || 1;
     return isSmall || dpr > 2.5;
   });
-  const audioContextRef = useRef<AudioContext | null>(null);
+  const [muted, setMuted] = useState(false);
+
+  // --- Feedback layer -----------------------------------------------------
+  const [displayStreak, setDisplayStreak] = useState(state.streak); // animated counter
+  const [streakPop, setStreakPop] = useState(0); // bump key, retriggers the pop animation
+  const [gainFloat, setGainFloat] = useState<{ id: number; text: string } | null>(null);
+  const [milestoneBanner, setMilestoneBanner] = useState<{ value: number; label: string } | null>(null);
+  const [recordFlash, setRecordFlash] = useState(false);
+
+  const particlesRef = useRef<ParticleFieldHandle>(null);
+  const diceAreaRef = useRef<HTMLDivElement>(null);
+  const stateRef = useRef(state);
+  const displayStreakRef = useRef(state.streak);
+  const streakRafRef = useRef<number | null>(null);
+  const revealGateRef = useRef(true);
+  const timeoutsRef = useRef<number[]>([]);
+  const stopRollSoundRef = useRef<(() => void) | null>(null);
+
+  stateRef.current = state;
+
+  const addTimeout = useCallback((fn: () => void, delay: number) => {
+    const id = window.setTimeout(fn, delay);
+    timeoutsRef.current.push(id);
+    return id;
+  }, []);
+
+  useEffect(() => () => {
+    timeoutsRef.current.forEach(clearTimeout);
+    if (streakRafRef.current !== null) cancelAnimationFrame(streakRafRef.current);
+    stopRollSoundRef.current?.();
+  }, []);
+
+  /** Roll the displayed streak up (or down) instead of snapping it */
+  const animateStreak = useCallback((target: number, duration = 480) => {
+    if (streakRafRef.current !== null) cancelAnimationFrame(streakRafRef.current);
+    const from = displayStreakRef.current;
+    if (from === target) return;
+    const start = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      const value = Math.round(from + (target - from) * easeOutCubic(t));
+      displayStreakRef.current = value;
+      setDisplayStreak(value);
+      if (t < 1) {
+        streakRafRef.current = requestAnimationFrame(step);
+      } else {
+        streakRafRef.current = null;
+      }
+    };
+    streakRafRef.current = requestAnimationFrame(step);
+  }, []);
+
+  // Keep the counter in sync with externally driven changes (Firebase, load),
+  // but never while a roll is mid-reveal — the payoff owns that moment.
+  useEffect(() => {
+    if (revealGateRef.current) animateStreak(state.streak, 380);
+  }, [state.streak, animateStreak]);
+
+  const tier = useMemo(() => getTier(displayStreak), [displayStreak]);
+  const tierIndex = useMemo(() => getTierIndex(displayStreak), [displayStreak]);
+  const goal = useMemo(() => nextMilestone(displayStreak), [displayStreak]);
+  const goalProgress = useMemo(() => milestoneProgress(displayStreak), [displayStreak]);
+
+  /** Viewport centre of the die, so bursts originate from the object itself */
+  const diceCenter = useCallback(() => {
+    const rect = diceAreaRef.current?.getBoundingClientRect();
+    if (!rect) return { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  }, []);
 
   // 自動儲存 state 到 localStorage
   useEffect(() => {
@@ -123,116 +207,149 @@ export default function App() {
     };
   }, []);
 
-  // Initialize Audio Context on first interaction
-  const initAudio = () => {
-    if (!audioContextRef.current) {
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-    }
-  };
+  /** Everything that fires the instant the die actually lands */
+  const celebrate = useCallback((isBad: boolean, streakBefore: number, maxBefore: number) => {
+    const particles = particlesRef.current;
+    const { x, y } = diceCenter();
+    revealGateRef.current = true;
 
-  const playSound = (type: 'roll' | 'win' | 'lose') => {
-    if (!audioContextRef.current) return;
-    
-    const ctx = audioContextRef.current;
-    const now = ctx.currentTime;
-
-    if (type === 'roll') {
-      const osc = ctx.createOscillator();
-      const gainNode = ctx.createGain();
-      osc.connect(gainNode);
-      gainNode.connect(ctx.destination);
-
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(100, now);
-      osc.frequency.linearRampToValueAtTime(600, now + 0.1);
-      gainNode.gain.setValueAtTime(0.1, now);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-      osc.start(now);
-      osc.stop(now + 0.1);
-    } else if (type === 'win') {
-      const osc = ctx.createOscillator();
-      const gainNode = ctx.createGain();
-      osc.connect(gainNode);
-      gainNode.connect(ctx.destination);
-
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(300, now);
-      osc.frequency.exponentialRampToValueAtTime(800, now + 0.3);
-      
-      const osc2 = ctx.createOscillator();
-      osc2.type = 'triangle';
-      osc2.frequency.setValueAtTime(500, now);
-      osc2.frequency.exponentialRampToValueAtTime(1000, now + 0.3);
-      osc2.connect(gainNode);
-
-      gainNode.gain.setValueAtTime(0.2, now);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
-      osc.start(now);
-      osc2.start(now);
-      osc.stop(now + 0.5);
-      osc2.stop(now + 0.5);
-    } else if (type === 'lose') {
-      // Explosion Sound
-      const bufferSize = ctx.sampleRate * 2.5; 
-      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < bufferSize; i++) {
-        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i/bufferSize, 2);
+    if (isBad) {
+      setShowExplosion(true);
+      sfx.playLose();
+      vibrate([50, 60, 140]);
+      const reach = Math.max(window.innerWidth, window.innerHeight);
+      particles?.ring({ x, y, color: '#FF006E', from: 20, to: reach, life: 0.9, width: 14 });
+      particles?.burst({
+        x, y, count: 130, colors: ['#FF006E', '#ef4444', '#fb7185', '#ffffff'],
+        speed: 980, gravity: 1100, life: 1.5, size: 8, radius: 30,
+      });
+      particles?.burst({
+        x, y, count: 44, colors: ['#7f1d1d', '#450a0a', '#FF006E'],
+        speed: 640, gravity: 1500, life: 1.9, size: 13, shape: 'confetti',
+      });
+      // Watching the streak drain to zero hurts more than a hard cut
+      animateStreak(0, 720);
+      setStreakPop((n) => n + 1);
+      if (streakBefore > 0) {
+        setGainFloat({ id: Date.now(), text: `-${streakBefore}` });
+        addTimeout(() => setGainFloat(null), 1400);
       }
-
-      const noise = ctx.createBufferSource();
-      noise.buffer = buffer;
-
-      const filter = ctx.createBiquadFilter();
-      filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(1000, now);
-      filter.frequency.exponentialRampToValueAtTime(10, now + 2.0);
-
-      const gainNode = ctx.createGain();
-      gainNode.gain.setValueAtTime(3, now);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, now + 2.0);
-
-      noise.connect(filter);
-      filter.connect(gainNode);
-      gainNode.connect(ctx.destination);
-      
-      noise.start(now);
+      addTimeout(() => setShowExplosion(false), 2000);
+      return;
     }
-  };
+
+    const streak = Math.max(stateRef.current.streak, streakBefore + 1);
+    const level = getTierIndex(streak);
+    const palette = getTier(streak).particles;
+    const color = getTier(streak).color;
+
+    sfx.playWin(streak, level);
+    vibrate(16 + level * 8);
+    animateStreak(streak, 420);
+    setStreakPop((n) => n + 1);
+    setGainFloat({ id: Date.now(), text: '+1' });
+    addTimeout(() => setGainFloat(null), 1100);
+
+    particles?.ring({ x, y, color, from: 24, to: 170 + level * 55, life: 0.6 + level * 0.06, width: 4 + level });
+    particles?.burst({
+      x, y,
+      count: 24 + level * 18,
+      colors: palette,
+      speed: 360 + level * 110,
+      gravity: 700,
+      life: 1 + level * 0.12,
+      size: 5 + level,
+      radius: 28,
+    });
+    if (level >= 2) {
+      particles?.burst({
+        x, y: y - 40,
+        count: 14 + level * 8,
+        colors: palette,
+        speed: 460 + level * 90,
+        angle: -Math.PI / 2,
+        spread: Math.PI * 0.9,
+        gravity: 900,
+        life: 1.6,
+        size: 9,
+        shape: 'confetti',
+      });
+    }
+
+    if (isMilestone(streak)) {
+      setMilestoneBanner({ value: streak, label: `${streak} 連勝` });
+      addTimeout(() => setMilestoneBanner(null), 2100);
+      addTimeout(() => {
+        sfx.playMilestone();
+        vibrate([25, 40, 25, 40, 60]);
+        particles?.ring({ x, y, color, from: 40, to: 620, life: 1.1, width: 10 });
+        // Side cannons for the full confetti-cannon feel
+        [0, 1].forEach((side) => {
+          particles?.burst({
+            x: side ? window.innerWidth : 0,
+            y: window.innerHeight * 0.72,
+            count: 60,
+            colors: palette,
+            speed: 1250,
+            angle: side ? -Math.PI * 0.72 : -Math.PI * 0.28,
+            spread: Math.PI * 0.35,
+            gravity: 1000,
+            life: 2.2,
+            size: 10,
+            shape: 'confetti',
+          });
+        });
+      }, 180);
+    }
+
+    if (streak > maxBefore && maxBefore > 0) {
+      setRecordFlash(true);
+      addTimeout(() => {
+        sfx.playRecord();
+        particles?.burst({
+          x, y, count: 40, colors: ['#fff1a8', '#fbbf24', '#ffffff'],
+          speed: 520, gravity: 300, life: 1.7, size: 5,
+        });
+      }, 320);
+      addTimeout(() => setRecordFlash(false), 2400);
+    }
+  }, [addTimeout, animateStreak, diceCenter]);
 
   const rollDice = () => {
     if (isRolling) return;
-    initAudio();
+    sfx.initAudio();
     setShowExplosion(false);
-    
+    setMilestoneBanner(null);
+    setGainFloat(null);
+
     // 點擊按鈕時立即決定抽中的面（0-19的索引）和結果
     const selectedFace = Math.floor(Math.random() * SIDES); // 0 to 19
     const isBad = selectedFace === 0; // 第一個面是大凶
-    
+    const streakBefore = stateRef.current.streak;
+    const maxBefore = stateRef.current.maxStreak;
+
     // 設置預先決定的面
     setSelectedFaceIndex(selectedFace);
-    
+
     // 先設置為滾動狀態
     setIsRolling(true);
     setState(prev => ({ ...prev, outcome: DiceOutcome.ROLLING }));
 
-    let clickCount = 0;
-    const clickInterval = setInterval(() => {
-      playSound('roll');
-      clickCount++;
-      if (clickCount > 8) clearInterval(clickInterval);
-    }, 100);
+    // 揭曉前先鎖住計數器，讓數字在骰子真正落定時才跳動
+    revealGateRef.current = false;
+    vibrate(12);
+    stopRollSoundRef.current?.();
+    stopRollSoundRef.current = sfx.playRoll(ROLL_DURATION);
 
     // 滾動動畫持續時間
-    setTimeout(async () => {
-      clearInterval(clickInterval);
+    addTimeout(async () => {
+      stopRollSoundRef.current?.();
+      stopRollSoundRef.current = null;
       setIsRolling(false);
-      
+      sfx.playImpact();
+
       // 滾動結束後，設置最終結果
       if (isBad) {
-        playSound('lose');
-        setShowExplosion(true);
-        
         // 重置 streak（全域或本地）
         if (useGlobalStreak) {
           // Firebase 模式：只更新 Firebase，streak 會透過 listener 同步
@@ -248,14 +365,10 @@ export default function App() {
             streak: 0,
             totalRolls: prev.totalRolls + 1,
             outcome: DiceOutcome.GREAT_MISFORTUNE,
-            maxStreak: prev.maxStreak 
+            maxStreak: prev.maxStreak
           }));
         }
-        
-        setTimeout(() => setShowExplosion(false), 2000);
       } else {
-        playSound('win');
-        
         // 增加 streak（全域或本地）
         if (useGlobalStreak) {
           // Firebase 模式：只更新 Firebase，streak 會透過 listener 同步
@@ -278,12 +391,17 @@ export default function App() {
           });
         }
       }
-    }, 1800);
+
+      // 骰子還在收斂，等它真的停穩再放獎勵
+      addTimeout(() => celebrate(isBad, streakBefore, maxBefore), REVEAL_DELAY);
+    }, ROLL_DURATION);
   };
 
   return (
     <div className={`min-h-screen flex flex-col items-center py-8 px-4 overflow-hidden relative ${showExplosion ? 'animate-shock' : ''}`}
          style={{
+           '--tier-rgb': tier.rgb,
+           '--tier-color': tier.color,
            backgroundColor: '#1A1A2E',
            backgroundImage: `
              repeating-linear-gradient(0deg, rgba(1, 205, 254, 0.05) 0px, transparent 2px, transparent 4px, rgba(1, 205, 254, 0.05) 6px),
@@ -291,8 +409,49 @@ export default function App() {
              radial-gradient(circle at 20% 30%, rgba(1, 205, 254, 0.2) 0%, transparent 50%),
              radial-gradient(circle at 80% 70%, rgba(255, 113, 206, 0.2) 0%, transparent 50%)
            `
-         }}>
-      
+         } as React.CSSProperties}>
+
+      {/* Reward particles (bursts, confetti cannons, shockwave rings) */}
+      <ParticleField ref={particlesRef} />
+
+      {/* Heat haze — the room glows in the current tier's colour as the run grows */}
+      <div
+        className="fixed inset-0 pointer-events-none z-0 transition-opacity duration-700"
+        style={{
+          opacity: tier.intensity * 0.55,
+          background:
+            'radial-gradient(circle at 50% 62%, rgba(var(--tier-rgb), 0.22) 0%, transparent 55%)',
+        }}
+      />
+
+      {/* Tension vignette that closes in while the die is in the air */}
+      <div className={`fixed inset-0 pointer-events-none z-30 roll-tension ${isRolling ? 'roll-tension-active' : ''}`} />
+
+      {/* Milestone celebration banner */}
+      {milestoneBanner && (
+        <div className="fixed inset-0 z-[46] pointer-events-none flex items-start justify-center pt-[12vh]">
+          <div className="animate-milestone-slam text-center px-10 py-6 rounded-xl backdrop-blur-sm"
+               style={{
+                 border: `4px solid ${tier.color}`,
+                 backgroundColor: 'rgba(10, 8, 24, 0.72)',
+                 boxShadow: `0 0 60px rgba(${tier.rgb}, 0.75), inset 0 0 40px rgba(${tier.rgb}, 0.25)`,
+               }}>
+            <p className="text-6xl md:text-8xl leading-none"
+               style={{
+                 fontFamily: "'Press Start 2P', cursive",
+                 color: tier.color,
+                 textShadow: `0 0 20px rgba(${tier.rgb}, 1), 0 0 50px rgba(${tier.rgb}, 0.7)`,
+               }}>
+              {milestoneBanner.value}
+            </p>
+            <p className="mt-4 tracking-[0.35em] uppercase"
+               style={{ fontFamily: "'VT323', monospace", fontSize: '26px', color: tier.color }}>
+              {milestoneBanner.label} · {tier.name}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Intense Explosion Overlay */}
       {showExplosion && (
         <div className="fixed inset-0 z-50 pointer-events-none flex items-center justify-center overflow-hidden">
@@ -355,7 +514,7 @@ export default function App() {
               {showDescription ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
               <span>{showDescription ? '隱藏說明' : '查看說明'}</span>
             </button>
-            <div className="mt-3 flex items-center justify-center">
+            <div className="mt-3 flex items-center justify-center gap-2">
               <button
                 onClick={() => setPerformanceMode(v => !v)}
                 className={`px-3 py-1 rounded-md border text-xs tracking-wider ${performanceMode ? 'border-emerald-600/60 bg-emerald-900/30 text-emerald-200' : 'border-cyan-700/60 bg-cyan-950/30 hover:bg-cyan-950/50 text-cyan-200'}`}
@@ -363,6 +522,22 @@ export default function App() {
                 title="切換效能模式"
               >
                 {performanceMode ? '效能模式：開' : '效能模式：關'}
+              </button>
+              <button
+                onClick={() => {
+                  sfx.initAudio();
+                  const next = !muted;
+                  setMuted(next);
+                  sfx.setMuted(next);
+                  if (!next) sfx.playClick();
+                }}
+                className="px-3 py-1 rounded-md border border-cyan-700/60 bg-cyan-950/30 hover:bg-cyan-950/50 text-cyan-200 flex items-center gap-1"
+                style={{fontFamily: "'VT323', monospace", fontSize: '14px'}}
+                title={muted ? '開啟音效' : '關閉音效'}
+                aria-label={muted ? '開啟音效' : '關閉音效'}
+              >
+                {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                {muted ? '音效：關' : '音效：開'}
               </button>
             </div>
         </div>
@@ -489,39 +664,89 @@ export default function App() {
              <div className="text-3xl md:text-4xl font-bold text-cyan-200 glow-text" style={{fontFamily: "'Press Start 2P', cursive"}}>{state.totalRolls}</div>
            </div>
 
-           <div className="relative card-border-gold bg-gradient-to-b from-emerald-950/90 to-teal-950/90 backdrop-blur-md p-4 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:scale-105 hover:shadow-lg hover:shadow-emerald-500/30 transition-all">
-             <div className="text-xs text-emerald-300 uppercase tracking-widest mb-2 flex items-center gap-1" style={{fontFamily: "'VT323', monospace", fontSize: '16px'}}>
-               <Sparkles size={16} className="text-emerald-300" /> STREAK
+           <div className={`relative overflow-visible streak-card ${tierIndex >= 3 ? 'streak-card-hot' : ''} backdrop-blur-md p-4 rounded-lg flex flex-col items-center justify-center transition-all`}>
+             <div className="text-xs uppercase tracking-widest mb-1 flex items-center gap-1" style={{fontFamily: "'VT323', monospace", fontSize: '16px', color: tier.color}}>
+               {tierIndex >= 3 ? <Flame size={16} /> : <Sparkles size={16} />} STREAK
              </div>
-             <div className={`text-4xl md:text-6xl transition-all duration-300 glow-gold ${state.outcome === DiceOutcome.GREAT_MISFORTUNE ? 'text-pink-500' : 'text-emerald-300'}`}
-                  style={{fontFamily: "'Press Start 2P', cursive"}}>
-               {state.streak}
-             </div>
-             {state.outcome === DiceOutcome.GREAT_FORTUNE && !isRolling && (
-                <div className="absolute -top-2 -right-2">
-                    <span className="flex h-4 w-4">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500"></span>
-                    </span>
-                </div>
+
+             {/* Floating gain / loss readout */}
+             {gainFloat && (
+               <span key={gainFloat.id}
+                     className="absolute -top-1 right-3 animate-gain-float pointer-events-none"
+                     style={{
+                       fontFamily: "'Press Start 2P', cursive",
+                       fontSize: '18px',
+                       color: gainFloat.text.startsWith('-') ? '#FF006E' : tier.color,
+                       textShadow: `0 0 14px ${gainFloat.text.startsWith('-') ? '#FF006E' : tier.color}`,
+                     }}>
+                 {gainFloat.text}
+               </span>
              )}
+
+             <div key={streakPop}
+                  className="text-4xl md:text-6xl animate-streak-pop leading-none"
+                  style={{
+                    fontFamily: "'Press Start 2P', cursive",
+                    color: state.outcome === DiceOutcome.GREAT_MISFORTUNE ? '#FF006E' : tier.color,
+                    textShadow: `0 0 10px rgba(${tier.rgb}, 1), 0 0 26px rgba(${tier.rgb}, ${0.4 + tier.intensity * 0.6}), 0 0 50px rgba(${tier.rgb}, ${tier.intensity * 0.6})`,
+                  }}>
+               {displayStreak}
+             </div>
+
+             <div className="mt-1 px-2 py-0.5 rounded-full text-[11px] tracking-[0.2em] uppercase"
+                  style={{
+                    fontFamily: "'VT323', monospace",
+                    fontSize: '14px',
+                    color: tier.color,
+                    border: `1px solid rgba(${tier.rgb}, 0.5)`,
+                    backgroundColor: `rgba(${tier.rgb}, 0.12)`,
+                  }}>
+               {tier.name}
+             </div>
+
+             {/* Progress towards the next milestone — the goal-gradient hook */}
+             <div className="w-full mt-3">
+               <div className="h-1.5 w-full rounded-full overflow-hidden" style={{ backgroundColor: 'rgba(255,255,255,0.08)' }}>
+                 <div className="h-full rounded-full transition-[width] duration-500 ease-out"
+                      style={{
+                        width: `${Math.round(goalProgress * 100)}%`,
+                        background: `linear-gradient(90deg, rgba(${tier.rgb}, 0.5), ${tier.color})`,
+                        boxShadow: `0 0 12px rgba(${tier.rgb}, 0.9)`,
+                      }} />
+               </div>
+               <div className="mt-1 text-center opacity-70" style={{fontFamily: "'VT323', monospace", fontSize: '13px', color: tier.color}}>
+                 下一站 {goal}
+               </div>
+             </div>
            </div>
 
-           <div className="card-border bg-gradient-to-b from-cyan-950/90 to-blue-950/90 backdrop-blur-md p-4 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:scale-105 hover:shadow-lg hover:shadow-cyan-500/30 transition-all">
+           <div className={`relative card-border bg-gradient-to-b from-cyan-950/90 to-blue-950/90 backdrop-blur-md p-4 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:scale-105 hover:shadow-lg hover:shadow-cyan-500/30 transition-all ${recordFlash ? 'animate-record-flash' : ''}`}>
              <div className="text-xs text-cyan-300 uppercase tracking-widest mb-2 flex items-center gap-1" style={{fontFamily: "'VT323', monospace", fontSize: '16px'}}>
                <Trophy size={16} /> BEST
              </div>
              <div className="text-3xl md:text-4xl font-bold text-cyan-200 glow-text" style={{fontFamily: "'Press Start 2P', cursive"}}>{state.maxStreak}</div>
+             {recordFlash && (
+               <span className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-0.5 rounded-full animate-gain-float"
+                     style={{
+                       fontFamily: "'VT323', monospace", fontSize: '15px',
+                       color: '#0b0715', backgroundColor: '#fff1a8',
+                       boxShadow: '0 0 18px rgba(255, 241, 168, 0.9)',
+                     }}>
+                 新紀錄！
+               </span>
+             )}
            </div>
         </div>
 
         {/* The Dice - Card Slot Style */}
-        <div className="mb-12 relative w-full flex justify-center h-[280px] items-center">
+        <div className="mb-6 relative w-full flex justify-center h-[280px] items-center">
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-[300px] h-[300px] dice-pedestal rounded-full flex items-center justify-center">
-              <RiskDice 
-                outcome={state.outcome} 
-                isRolling={isRolling} 
+            <div ref={diceAreaRef}
+                 className={`w-[300px] h-[300px] dice-pedestal rounded-full flex items-center justify-center ${isRolling ? 'dice-pedestal-charging' : ''}`}
+                 style={{ '--tier-rgb': tier.rgb } as React.CSSProperties}>
+              <RiskDice
+                outcome={state.outcome}
+                isRolling={isRolling}
                 performanceMode={performanceMode}
                 selectedFaceIndex={selectedFaceIndex}
               />
@@ -529,37 +754,62 @@ export default function App() {
           </div>
         </div>
 
+        {/* What this roll puts on the line */}
+        <div className="mb-6 h-8 flex items-center justify-center">
+          {displayStreak > 0 && (
+            <p className={`tracking-widest ${displayStreak >= 10 ? 'animate-risk-throb' : ''}`}
+               style={{fontFamily: "'VT323', monospace", fontSize: '20px', color: displayStreak >= 10 ? '#FF71CE' : 'rgba(226, 232, 240, 0.6)'}}>
+              ⚠ 這一擲押上 <span style={{ color: tier.color, fontWeight: 700 }}>{displayStreak}</span> 連勝
+            </p>
+          )}
+        </div>
+
         {/* Dynamic Status Message - Card Text Style */}
-        <div className="h-32 flex flex-col items-center justify-center mb-8 text-center px-4 w-full">
+        <div className="min-h-[210px] flex flex-col items-center justify-center mb-8 text-center px-4 w-full">
           {isRolling && (
-            <div className="card-border bg-gradient-to-b from-cyan-950/90 to-pink-950/90 backdrop-blur-md px-8 py-4 rounded-lg animate-pulse">
+            <div className="card-border bg-gradient-to-b from-cyan-950/90 to-pink-950/90 backdrop-blur-md px-8 py-4 rounded-lg animate-rolling-tension">
               <p className="text-2xl text-cyan-300 tracking-widest glow-cyan" style={{fontFamily: "'Press Start 2P', cursive"}}>
-                ROLLING...
+                ROLLING<span className="animate-ellipsis"></span>
               </p>
             </div>
           )}
           {!isRolling && state.outcome === DiceOutcome.IDLE && (
             <div className="card-border bg-gradient-to-b from-cyan-950/70 to-pink-950/70 backdrop-blur-sm px-8 py-4 rounded-lg">
               <p className="text-cyan-300 text-lg tracking-wider" style={{fontFamily: "'VT323', monospace", fontSize: '24px'}}>
-                Press START to roll fate...
+                {tier.tagline}
               </p>
             </div>
           )}
           {!isRolling && state.outcome === DiceOutcome.GREAT_FORTUNE && (
-            <div className="card-border-gold bg-gradient-to-b from-emerald-950/90 to-teal-950/90 backdrop-blur-md px-8 py-6 rounded-lg animate-bounce-short flex flex-col items-center">
-              <p className="text-5xl md:text-6xl text-emerald-300 glow-gold mb-3" style={{fontFamily: "'Press Start 2P', cursive", writingMode: 'vertical-rl', textOrientation: 'upright'}}>
-                大吉
+            <div className="backdrop-blur-md px-8 py-6 rounded-lg animate-fortune-pop flex flex-col items-center"
+                 style={{
+                   border: `4px solid ${tier.color}`,
+                   background: `linear-gradient(180deg, rgba(${tier.rgb}, 0.16), rgba(8, 6, 20, 0.9))`,
+                   boxShadow: `0 0 ${20 + tier.intensity * 45}px rgba(${tier.rgb}, ${0.5 + tier.intensity * 0.5}), inset 0 0 24px rgba(${tier.rgb}, 0.18)`,
+                 }}>
+              {/* Stacked as two lines — `writing-mode: vertical-rl` collapses to
+                  zero height here and lets the glyphs escape the card. */}
+              <p className="text-5xl md:text-6xl mb-3 flex flex-col items-center gap-2 leading-none"
+                 style={{
+                   fontFamily: "'Press Start 2P', cursive",
+                   color: tier.color,
+                   textShadow: `0 0 10px rgba(${tier.rgb}, 1), 0 0 30px rgba(${tier.rgb}, 0.7)`,
+                 }}>
+                <span>大</span>
+                <span>吉</span>
               </p>
-              <div className="h-1 w-full bg-gradient-to-r from-transparent via-emerald-400 to-transparent mb-2"></div>
-              <p className="text-emerald-300 text-sm uppercase tracking-widest" style={{fontFamily: "'VT323', monospace", fontSize: '18px'}}>
-                ★ FORTUNE SMILES ★
+              <div className="h-1 w-full mb-2" style={{ background: `linear-gradient(90deg, transparent, ${tier.color}, transparent)` }}></div>
+              <p className="text-sm uppercase tracking-widest" style={{fontFamily: "'VT323', monospace", fontSize: '18px', color: tier.color}}>
+                ★ {displayStreak} 連勝 · {tier.name} ★
               </p>
             </div>
           )}
           {!isRolling && state.outcome === DiceOutcome.GREAT_MISFORTUNE && (
             <div className="card-border-red bg-gradient-to-b from-pink-950/90 to-rose-950/90 backdrop-blur-md px-8 py-6 rounded-lg animate-shake flex flex-col items-center">
-              <p className="text-5xl md:text-6xl glow-red mb-3" style={{fontFamily: "'Press Start 2P', cursive", color: '#FF006E', writingMode: 'vertical-rl', textOrientation: 'upright'}}>
-                大凶
+              <p className="text-5xl md:text-6xl glow-red mb-3 flex flex-col items-center gap-2 leading-none"
+                 style={{fontFamily: "'Press Start 2P', cursive", color: '#FF006E'}}>
+                <span>大</span>
+                <span>凶</span>
               </p>
               <div className="h-1 w-full bg-gradient-to-r from-transparent via-pink-500 to-transparent mb-2"></div>
               <p className="text-pink-300 text-sm uppercase tracking-widest" style={{fontFamily: "'VT323', monospace", fontSize: '18px'}}>
@@ -574,18 +824,24 @@ export default function App() {
           onClick={rollDice}
           disabled={isRolling}
           className={`
-            relative group w-full max-w-[320px] py-5 rounded-lg 
+            relative group w-full max-w-[320px] py-5 rounded-lg overflow-hidden
             text-lg tracking-[0.2em] uppercase transition-all duration-300
-            ${isRolling 
-              ? 'bg-slate-900 text-slate-600 cursor-not-allowed transform scale-95 border-4 border-slate-800' 
-              : 'card-border bg-gradient-to-b from-cyan-700 to-pink-800 text-cyan-100 hover:from-cyan-600 hover:to-pink-700 hover:scale-105 active:scale-95 cursor-pointer shadow-[0_0_40px_rgba(1,205,254,0.6)]'
+            ${isRolling
+              ? 'bg-slate-900 text-slate-600 cursor-not-allowed transform scale-95 border-4 border-slate-800'
+              : 'roll-button card-border bg-gradient-to-b from-cyan-700 to-pink-800 text-cyan-100 hover:from-cyan-600 hover:to-pink-700 hover:scale-105 active:scale-95 cursor-pointer'
             }
           `}
           style={{fontFamily: "'Press Start 2P', cursive"}}
         >
-          <div className="flex items-center justify-center gap-3">
+          {/* Shine sweep — keeps the idle button feeling alive and clickable */}
+          {!isRolling && <span className="roll-button-shine" aria-hidden="true" />}
+          <div className="relative flex flex-col items-center justify-center gap-2">
             <span className={isRolling ? '' : 'glow-cyan'}>
               {isRolling ? '◆ ROLLING ◆' : '▶ ROLL FATE ◀'}
+            </span>
+            <span className="tracking-[0.3em] opacity-80"
+                  style={{fontFamily: "'VT323', monospace", fontSize: '15px', color: isRolling ? '#475569' : tier.color}}>
+              {isRolling ? '命運計算中' : `95% 大吉 · 目標 ${goal}`}
             </span>
           </div>
         </button>
